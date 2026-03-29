@@ -1,0 +1,254 @@
+<div class="wf-build" #fullscreenRoot>
+  <div class="wf-build-toolbar glass-card maintenance-toolbar">
+    <button type="button" class="table-footer-btn" (click)="closed.emit()">← Workflows</button>
+    <div class="wf-build-title">
+      <div class="wf-build-title-main">{{ workflowTitle }}</div>
+      <div class="wf-build-title-sub muted" *ngIf="linkFromId == null">
+        Pan empty space · wheel zoom · blue → green port to connect
+      </div>
+      <div class="wf-build-hint-connect" *ngIf="linkFromId != null">
+        Click the <span class="wf-hint-in">green</span> port on the target node
+      </div>
+    </div>
+    <div class="wf-build-zoom wf-build-tools">
+      <button
+        type="button"
+        class="btn-icon ghost wf-builder-help-btn"
+        (click)="helpOpen = true"
+        title="How workflows work"
+        aria-label="How workflows work"
+      >
+        ⓘ
+      </button>
+      <button
+        type="button"
+        class="table-footer-btn"
+        (click)="toggleFullscreen()"
+        [title]="isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen editor'"
+      >
+        {{ isFullscreen ? 'Exit full screen' : 'Full screen' }}
+      </button>
+      <button type="button" class="btn-icon ghost" (click)="zoomOut()" title="Zoom out">−</button>
+      <button type="button" class="btn-icon ghost" (click)="zoomIn()" title="Zoom in">+</button>
+      <button type="button" class="table-footer-btn" (click)="resetView()" title="Default zoom & position">Reset</button>
+      <button type="button" class="table-footer-btn primary" (click)="fitView()" title="Fit all nodes in view">Fit</button>
+      <button type="button" class="table-footer-btn" (click)="autoLayout()" title="Layered layout from start node">Auto layout</button>
+    </div>
+    <button type="button" class="btn-primary" [disabled]="saving || loading" (click)="save()">
+      {{ saving ? 'Saving…' : 'Save' }}
+    </button>
+  </div>
+
+  <div class="wf-loading-skeleton glass-card" *ngIf="loading" aria-busy="true">
+    <div class="wf-sk-row"></div>
+    <div class="wf-sk-row short"></div>
+    <div class="wf-sk-canvas"></div>
+  </div>
+
+  <div class="wf-build-body" *ngIf="!loading">
+    <aside class="wf-palette glass-card">
+      <h4>Add node</h4>
+      <p class="muted small wf-palette-hint">
+        Start is fixed. Add states, actions, decisions, and end nodes — then link them.
+      </p>
+      <button type="button" class="table-footer-btn primary" *ngFor="let t of addableTypes" (click)="addNode(t)">
+        + {{ t }}
+      </button>
+    </aside>
+
+    <div class="wf-viewport-wrap">
+      <div
+        #viewport
+        class="wf-viewport"
+        (wheel)="onWheel($event)"
+        (pointerdown)="onViewportPointerDown($event)"
+      >
+        <div class="wf-world" [style.transform]="worldTransform">
+          <div class="wf-grid-bg" aria-hidden="true"></div>
+          <svg class="wf-svg" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="wf-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 Z" fill="#6366f1" />
+              </marker>
+              <marker id="wf-arrow-hover" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 Z" fill="#4f46e5" />
+              </marker>
+            </defs>
+            <g *ngFor="let e of edges; trackBy: trackEdge" class="wf-edge-g">
+              <path
+                class="wf-edge-hit"
+                [class.sel]="selectedEdgeId === e.id"
+                [class.hov]="hoveredEdgeId === e.id"
+                [attr.d]="edgePath(e)"
+                (click)="selectEdge(e, $event)"
+                (pointerdown)="$event.stopPropagation()"
+                (mouseenter)="setEdgeHover(e.id)"
+                (mouseleave)="setEdgeHover(null)"
+              />
+              <path
+                class="wf-edge-line"
+                [class.sel]="selectedEdgeId === e.id"
+                [class.hov]="hoveredEdgeId === e.id"
+                [attr.d]="edgePath(e)"
+                [attr.marker-end]="edgeMarkerEnd(e)"
+                pointer-events="none"
+              />
+              <ng-container *ngIf="edgeDisplayLabel(e)">
+                <text
+                  *ngIf="edgeLabelPoint(e) as ep"
+                  class="wf-edge-label"
+                  text-anchor="middle"
+                  [attr.x]="ep.x"
+                  [attr.y]="ep.y - 6"
+                >
+                  {{ edgeDisplayLabel(e) }}
+                </text>
+              </ng-container>
+            </g>
+          </svg>
+          <div class="wf-nodes">
+            <div
+              class="wf-node-wrap"
+              *ngFor="let n of nodes; trackBy: trackNode"
+              [style.left.px]="n.positionX"
+              [style.top.px]="n.positionY"
+              (pointerdown)="onNodePointerDown(n, $event)"
+            >
+              <app-workflow-canvas-node
+                [nodeType]="n.nodeType"
+                [title]="n.label || n.name || n.nodeType"
+                [subtitle]="n.name && n.label !== n.name ? n.name : ''"
+                [selected]="selectedNodeId === n.id"
+                [isLinkSource]="linkFromId === n.id"
+                [showInPort]="n.nodeType !== 'start'"
+                [showOutPort]="n.nodeType !== 'end'"
+                (outPortClick)="onOutPort(n, $event)"
+                (inPortClick)="onInPort(n, $event)"
+              ></app-workflow-canvas-node>
+            </div>
+          </div>
+        </div>
+
+        <div class="wf-minimap" *ngIf="nodes.length" aria-label="Minimap">
+          <svg
+            class="wf-minimap-svg"
+            [attr.viewBox]="minimapViewBox()"
+            preserveAspectRatio="xMidYMid meet"
+            (click)="onMinimapClick($event)"
+          >
+            <rect
+              *ngFor="let n of nodes; trackBy: trackNode"
+              class="wf-mm-node"
+              [class.mm-sel]="selectedNodeId === n.id"
+              [attr.x]="n.positionX"
+              [attr.y]="n.positionY"
+              [attr.width]="158"
+              [attr.height]="68"
+              rx="8"
+            />
+            <rect
+              *ngIf="minimapViewportRect() as vr"
+              class="wf-mm-viewport"
+              [attr.x]="vr.x"
+              [attr.y]="vr.y"
+              [attr.width]="vr.width"
+              [attr.height]="vr.height"
+              rx="4"
+            />
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <aside class="wf-drawer glass-card wf-inspector" *ngIf="selectedNode || selectedEdge">
+      <ng-container *ngIf="selectedNode as sn">
+        <div class="wf-inspector-head">
+          <h4>Node</h4>
+          <span class="wf-inspector-badge" [attr.data-nt]="sn.nodeType">{{ sn.nodeType }}</span>
+        </div>
+        <div class="wf-inspector-tabs" role="tablist">
+          <button type="button" role="tab" [class.active]="inspectorTab === 'general'" (click)="inspectorTab = 'general'">
+            General
+          </button>
+          <button type="button" role="tab" [class.active]="inspectorTab === 'config'" (click)="inspectorTab = 'config'">
+            Config
+          </button>
+        </div>
+        <ng-container *ngIf="inspectorTab === 'general'">
+          <div class="form-group">
+            <label>Name</label>
+            <input [(ngModel)]="nodeNameEdit" maxlength="100" />
+          </div>
+          <div class="form-group">
+            <label>Label</label>
+            <input [(ngModel)]="nodeLabelEdit" maxlength="100" />
+          </div>
+          <div class="form-group" *ngIf="sn.nodeType !== 'start'">
+            <label>Type</label>
+            <select [(ngModel)]="nodeTypeEdit">
+              <option value="state">state</option>
+              <option value="action">action</option>
+              <option value="decision">decision</option>
+              <option value="end">end</option>
+            </select>
+          </div>
+        </ng-container>
+        <ng-container *ngIf="inspectorTab === 'config'">
+          <div class="form-group">
+            <label>Config (JSON)</label>
+            <textarea class="wf-json-area" rows="12" [(ngModel)]="nodeConfigJson"></textarea>
+          </div>
+        </ng-container>
+        <div class="wf-drawer-actions">
+          <button type="button" class="table-footer-btn primary" (click)="applyNodeEdits()">Apply</button>
+          <button
+            type="button"
+            class="table-footer-btn danger"
+            *ngIf="sn.nodeType !== 'start'"
+            (click)="deleteSelectedNode()"
+          >
+            Delete node
+          </button>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="selectedEdge as se">
+        <div class="wf-inspector-head">
+          <h4>Connection</h4>
+        </div>
+        <div class="wf-inspector-tabs" role="tablist">
+          <button type="button" role="tab" [class.active]="inspectorTab === 'general'" (click)="inspectorTab = 'general'">
+            General
+          </button>
+          <button type="button" role="tab" [class.active]="inspectorTab === 'config'" (click)="inspectorTab = 'config'">
+            Condition
+          </button>
+        </div>
+        <ng-container *ngIf="inspectorTab === 'general'">
+          <p class="wf-edge-route muted small">
+            <strong>{{ nodeTitleById(se.fromNodeId) }}</strong>
+            <span class="wf-edge-arrow">→</span>
+            <strong>{{ nodeTitleById(se.toNodeId) }}</strong>
+          </p>
+          <div class="form-group">
+            <label>Edge label</label>
+            <input [(ngModel)]="edgeLabelEdit" maxlength="120" placeholder="e.g. High priority" />
+          </div>
+          <p class="muted small wf-inspector-hint">Shown on the canvas. Stored as <code>label</code> in condition JSON.</p>
+        </ng-container>
+        <ng-container *ngIf="inspectorTab === 'config'">
+          <div class="form-group">
+            <label>Condition (JSON)</label>
+            <textarea class="wf-json-area" rows="12" [(ngModel)]="edgeConditionJson"></textarea>
+          </div>
+        </ng-container>
+        <div class="wf-drawer-actions">
+          <button type="button" class="table-footer-btn primary" (click)="applyEdgeEdits()">Apply</button>
+          <button type="button" class="table-footer-btn danger" (click)="deleteSelectedEdge()">Delete edge</button>
+        </div>
+      </ng-container>
+    </aside>
+  </div>
+
+  <app-workflow-help-modal [(open)]="helpOpen"></app-workflow-help-modal>
+</div>

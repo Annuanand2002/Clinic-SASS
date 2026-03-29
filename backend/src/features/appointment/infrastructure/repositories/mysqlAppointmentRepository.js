@@ -1,5 +1,6 @@
 const { getPool } = require('../../../../core/db/pool');
 const { sqlClinicColumn } = require('../../../../core/clinic/clinicScope');
+const { initializeEntityWorkflowScoped } = require('../../../workflow/application/workflowEngine');
 
 function mapAppointmentRow(row) {
   return {
@@ -14,7 +15,8 @@ function mapAppointmentRow(row) {
     status: row.status,
     title: row.title || '',
     description: row.description || '',
-    color: row.color || 'green'
+    color: row.color || 'green',
+    currentNodeId: row.current_node_id != null ? Number(row.current_node_id) : null
   };
 }
 
@@ -61,7 +63,7 @@ async function listAppointments(pageInput, limitInput, filters = {}, scope) {
   );
   const total = Number(countRows?.[0]?.total || 0);
 
-  const [rows] = await pool.query(
+    const [rows] = await pool.query(
     `SELECT
       a.id,
       a.patient_id,
@@ -73,6 +75,7 @@ async function listAppointments(pageInput, limitInput, filters = {}, scope) {
       a.title,
       a.description,
       a.color,
+      a.current_node_id,
       up.username AS patient_name,
       ud.username AS doctor_name
     FROM appointment a
@@ -117,7 +120,7 @@ async function hasDoctorTimeConflict(doctorId, appointmentDate, startTime, endTi
   return !!(rows && rows[0]);
 }
 
-async function createAppointment(payload, clinicId) {
+async function createAppointment(payload, clinicId, scope) {
   const pool = getPool();
   const cid = Number(clinicId);
   const connection = await pool.getConnection();
@@ -136,7 +139,7 @@ async function createAppointment(payload, clinicId) {
       err.statusCode = 400;
       throw err;
     }
-    await connection.query(
+    const [ins] = await connection.query(
       `INSERT INTO appointment (
       patient_id, doctor_id, appointment_date, start_time, end_time, status, title, description, color, clinic_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -153,7 +156,10 @@ async function createAppointment(payload, clinicId) {
         cid
       ]
     );
+    const appointmentId = Number(ins.insertId);
+    await initializeEntityWorkflowScoped(connection, 'appointment', appointmentId, scope, null);
     await connection.commit();
+    return appointmentId;
   } catch (e) {
     await connection.rollback();
     throw e;

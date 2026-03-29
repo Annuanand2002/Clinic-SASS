@@ -17,6 +17,28 @@ async function ensureColumnExists(tableName, columnName, definitionSql) {
   await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${definitionSql}`);
 }
 
+/** At most one workflow row per entity_type (complaint, appointment, …). */
+async function ensureUniqueWorkflowEntityTypeIndex() {
+  const pool = getPool();
+  const [idxRows] = await pool.query(
+    `SELECT COUNT(*) AS cnt
+     FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'workflow'
+       AND INDEX_NAME = 'uq_workflow_entity_type'`
+  );
+  if (Number(idxRows?.[0]?.cnt || 0) > 0) return;
+  try {
+    await pool.query('CREATE UNIQUE INDEX uq_workflow_entity_type ON workflow (entity_type)');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[db] could not create uq_workflow_entity_type (duplicate entity_type rows?). Keep one workflow per type, then restart:',
+      err?.message || err
+    );
+  }
+}
+
 async function ensureAuthTables() {
   const pool = getPool();
 
@@ -180,6 +202,8 @@ async function ensureAppointmentTables() {
       CONSTRAINT unique_doctor_slot UNIQUE (doctor_id, appointment_date, start_time)
     );
   `);
+
+  await ensureColumnExists('appointment', 'clinic_id', 'clinic_id BIGINT NULL');
 }
 
 async function ensureStaffTables() {
@@ -271,11 +295,208 @@ async function ensureInventoryTables() {
  * Extends `attachment` with polymorphic entity metadata (no new tables).
  * Safe to run on DBs that already applied the same ALTER manually.
  */
+/**
+ * Existing databases may have entity_type without `complaint`; extend ENUM safely.
+ */
+async function ensureAttachmentEntityTypeIncludesComplaint() {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT COLUMN_TYPE AS colType
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'attachment'
+       AND COLUMN_NAME = 'entity_type'`
+  );
+  const colType = rows && rows[0] && rows[0].colType ? String(rows[0].colType) : '';
+  if (!colType || colType.includes("'complaint'")) return;
+
+  await pool.query(`
+    ALTER TABLE attachment MODIFY COLUMN entity_type
+    ENUM('patient','doctor','appointment','billing','inventory','medical_record','complaint') NULL
+  `);
+}
+
+async function ensureComplaintTables() {
+  const pool = getPool();
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS complaint (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      clinic_id BIGINT NOT NULL,
+      title VARCHAR(150) NOT NULL,
+      description TEXT,
+      category ENUM('equipment','electric','software','other') DEFAULT 'other',
+      priority ENUM('low','medium','high','urgent') DEFAULT 'medium',
+      status ENUM('open','acknowledged','in_progress','resolved','rejected') DEFAULT 'open',
+      created_by BIGINT NOT NULL,
+      assigned_to BIGINT NULL,
+      rejection_reason TEXT NULL,
+      resolved_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_clinic (clinic_id),
+      INDEX idx_status (status),
+      INDEX idx_priority (priority),
+      CONSTRAINT fk_complaint_clinic FOREIGN KEY (clinic_id) REFERENCES clinic(id),
+      CONSTRAINT fk_complaint_created_by FOREIGN KEY (created_by) REFERENCES users(id),
+      CONSTRAINT fk_complaint_assigned_to FOREIGN KEY (assigned_to) REFERENCES users(id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS complaint_updates (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      complaint_id BIGINT NOT NULL,
+      status ENUM('open','acknowledged','in_progress','resolved','rejected') NOT NULL,
+      message TEXT,
+      updated_by BIGINT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_complaint (complaint_id),
+      CONSTRAINT fk_complaint_updates_complaint FOREIGN KEY (complaint_id) REFERENCES complaint(id) ON DELETE CASCADE,
+      CONSTRAINT fk_complaint_updates_user FOREIGN KEY (updated_by) REFERENCES users(id)
+    );
+  `);
+}
+
+async function ensureWorkflowTables() {
+  const pool = getPool();
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workflow (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100),
+      entity_type VARCHAR(50),
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_workflow_entity_active (entity_type, is_active)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workflow_node (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      workflow_id BIGINT NOT NULL,
+      node_type ENUM('start','state','action','decision','end') NOT NULL,
+      name VARCHAR(100),
+      label VARCHAR(100),
+      config JSON,
+      position_x INT,
+      position_y INT,
+      CONSTRAINT fk_workflow_node_workflow FOREIGN KEY (workflow_id) REFERENCES workflow(id) ON DELETE CASCADE,
+      INDEX idx_workflow_node_workflow (workflow_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workflow_edge (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      workflow_id BIGINT NOT NULL,
+      from_node_id BIGINT,
+      to_node_id BIGINT,
+      condition_json JSON,
+      CONSTRAINT fk_workflow_edge_workflow FOREIGN KEY (workflow_id) REFERENCES workflow(id) ON DELETE CASCADE,
+      CONSTRAINT fk_workflow_edge_from FOREIGN KEY (from_node_id) REFERENCES workflow_node(id) ON DELETE CASCADE,
+      CONSTRAINT fk_workflow_edge_to FOREIGN KEY (to_node_id) REFERENCES workflow_node(id) ON DELETE CASCADE
+    );
+  `);
+
+  // Older DBs may have workflow_edge from before condition_json existed; CREATE IF NOT EXISTS does not add columns.
+  await ensureColumnExists('workflow_edge', 'condition_json', 'condition_json JSON NULL');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workflow_execution (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      entity_type VARCHAR(50) NOT NULL,
+      entity_id BIGINT NOT NULL,
+      node_id BIGINT,
+      action_taken VARCHAR(100),
+      message TEXT,
+      executed_by BIGINT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_workflow_exec_entity (entity_type, entity_id)
+    );
+  `);
+
+  await ensureColumnExists('complaint', 'current_node_id', 'current_node_id BIGINT NULL');
+  await ensureColumnExists('appointment', 'current_node_id', 'current_node_id BIGINT NULL');
+
+  await ensureUniqueWorkflowEntityTypeIndex();
+
+  await seedDefaultWorkflowGraphs(pool);
+}
+
+async function seedDefaultWorkflowGraphs(pool) {
+  try {
+    const [cWf] = await pool.query(
+      `SELECT id FROM workflow WHERE entity_type = 'complaint' AND is_active = 1 ORDER BY id ASC LIMIT 1`
+    );
+    if (!cWf?.length) {
+      const [insW] = await pool.query(
+        `INSERT INTO workflow (name, entity_type, is_active) VALUES ('Default complaint flow', 'complaint', 1)`
+      );
+      const wid = Number(insW.insertId);
+      const [insStart] = await pool.query(
+        `INSERT INTO workflow_node (workflow_id, node_type, name, label, config, position_x, position_y)
+         VALUES (?, 'start', 'start', 'Start', NULL, 0, 0)`,
+        [wid]
+      );
+      const startId = Number(insStart.insertId);
+      const stateCfg = JSON.stringify({
+        syncComplaintStatus: 'open',
+        allowedRoles: ['Staff', 'Admin', 'Super Admin', 'Doctor']
+      });
+      const [insState] = await pool.query(
+        `INSERT INTO workflow_node (workflow_id, node_type, name, label, config, position_x, position_y)
+         VALUES (?, 'state', 'submitted', 'Submitted', ?, 160, 0)`,
+        [wid, stateCfg]
+      );
+      const stateId = Number(insState.insertId);
+      await pool.query(
+        `INSERT INTO workflow_edge (workflow_id, from_node_id, to_node_id, condition_json) VALUES (?, ?, ?, NULL)`,
+        [wid, startId, stateId]
+      );
+    }
+
+    const [aWf] = await pool.query(
+      `SELECT id FROM workflow WHERE entity_type = 'appointment' AND is_active = 1 ORDER BY id ASC LIMIT 1`
+    );
+    if (!aWf?.length) {
+      const [insW] = await pool.query(
+        `INSERT INTO workflow (name, entity_type, is_active) VALUES ('Default appointment flow', 'appointment', 1)`
+      );
+      const wid = Number(insW.insertId);
+      const [insStart] = await pool.query(
+        `INSERT INTO workflow_node (workflow_id, node_type, name, label, config, position_x, position_y)
+         VALUES (?, 'start', 'start', 'Start', NULL, 0, 0)`,
+        [wid]
+      );
+      const startId = Number(insStart.insertId);
+      const stateCfg = JSON.stringify({
+        syncAppointmentStatus: 'scheduled',
+        allowedRoles: ['Staff', 'Admin', 'Super Admin', 'Doctor']
+      });
+      const [insState] = await pool.query(
+        `INSERT INTO workflow_node (workflow_id, node_type, name, label, config, position_x, position_y)
+         VALUES (?, 'state', 'scheduled', 'Scheduled', ?, 160, 0)`,
+        [wid, stateCfg]
+      );
+      const stateId = Number(insState.insertId);
+      await pool.query(
+        `INSERT INTO workflow_edge (workflow_id, from_node_id, to_node_id, condition_json) VALUES (?, ?, ?, NULL)`,
+        [wid, startId, stateId]
+      );
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[db] seedDefaultWorkflowGraphs:', err?.message || err);
+  }
+}
+
 async function ensureAttachmentMetadataColumns() {
   await ensureColumnExists(
     'attachment',
     'entity_type',
-    "entity_type ENUM('patient','doctor','appointment','billing','inventory','medical_record') NULL"
+    "entity_type ENUM('patient','doctor','appointment','billing','inventory','medical_record','complaint') NULL"
   );
   await ensureColumnExists('attachment', 'entity_id', 'entity_id BIGINT NULL');
   await ensureColumnExists('attachment', 'document_type', 'document_type VARCHAR(100) NULL');
@@ -381,6 +602,9 @@ module.exports = {
   ensureStaffTables,
   ensureInventoryTables,
   ensureFinancialTables,
-  ensureAttachmentMetadataColumns
+  ensureAttachmentMetadataColumns,
+  ensureComplaintTables,
+  ensureAttachmentEntityTypeIncludesComplaint,
+  ensureWorkflowTables
 };
 

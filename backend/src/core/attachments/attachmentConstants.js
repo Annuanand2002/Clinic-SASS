@@ -8,7 +8,8 @@ const ENTITY_TYPES = Object.freeze([
   'appointment',
   'billing',
   'inventory',
-  'medical_record'
+  'medical_record',
+  'complaint'
 ]);
 
 const MAX_DOCUMENT_TYPE_LEN = 100;

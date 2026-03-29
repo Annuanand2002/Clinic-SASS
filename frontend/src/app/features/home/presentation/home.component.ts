@@ -4,11 +4,8 @@ import { Router } from '@angular/router';
 import { animate, style, transition, trigger } from '@angular/animations';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, of, firstValueFrom } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { environment } from '../../../../environments/environment';
 import { ToastService } from '../../../core/ui/toast.service';
 
@@ -157,6 +154,71 @@ interface InventorySummaryRow {
   isLowStock: boolean;
 }
 
+interface ComplaintClinicRef {
+  id: number;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+}
+
+interface ComplaintListRow {
+  id: number;
+  clinicId: number;
+  title: string;
+  description?: string | null;
+  category: string;
+  priority: string;
+  status: string;
+  createdBy: number;
+  assignedTo?: number | null;
+  rejectionReason?: string | null;
+  resolvedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  clinic?: ComplaintClinicRef;
+  assignedToUser?: { userId: number; username: string; email: string } | null;
+}
+
+interface ComplaintUpdateDto {
+  id: number;
+  status: string;
+  message: string | null;
+  createdAt: string | null;
+  updatedBy: { id: number; username: string; email: string };
+}
+
+interface ComplaintAttachmentMeta {
+  id: number;
+  fileName: string;
+  fileType: string;
+  createdDate: string | null;
+}
+
+interface ComplaintDetailDto {
+  id: number;
+  clinicId: number;
+  title: string;
+  description: string | null;
+  category: string;
+  priority: string;
+  status: string;
+  createdBy: number;
+  assignedTo: number | null;
+  rejectionReason: string | null;
+  resolvedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  clinic?: ComplaintClinicRef;
+  createdByStaff?: {
+    user: { id: number; username: string; email: string };
+    staff: { id: number; staffType: string; department: string | null; joiningDate: string | null } | null;
+  };
+  assignedToUser?: { userId: number; username: string; email: string } | null;
+  updates: ComplaintUpdateDto[];
+  attachments: ComplaintAttachmentMeta[];
+}
+
 @Component({
   selector: 'app-home',
   templateUrl: './home.component.html',
@@ -187,6 +249,7 @@ export class HomeComponent implements OnInit {
   private readonly attachmentApiUrl = `${environment.apiUrl}/api/attachments`;
   private readonly usersApiUrl = `${environment.apiUrl}/api/users`;
   private readonly clinicsApiUrl = `${environment.apiUrl}/api/clinics`;
+  private readonly complaintsApiUrl = `${environment.apiUrl}/api/complaints`;
 
   /** Set while PATCH /users/:id/active is in flight for that user. */
   userAccountToggleUserId: number | null = null;
@@ -426,6 +489,52 @@ export class HomeComponent implements OnInit {
   } | null = null;
   inventoryReportLoading = false;
   inventoryHelpOpen = false;
+
+  maintenanceRaiseForm: {
+    title: string;
+    description: string;
+    category: 'equipment' | 'electric' | 'software' | 'other';
+    priority: 'low' | 'medium' | 'high' | 'urgent';
+    initialMessage: string;
+    file: File | null;
+  } = {
+    title: '',
+    description: '',
+    category: 'other',
+    priority: 'medium',
+    initialMessage: '',
+    file: null
+  };
+  maintenanceRaiseSubmitting = false;
+  maintenanceRaiseError = '';
+  maintenanceMyRows: ComplaintListRow[] = [];
+  maintenanceMyLoading = false;
+  maintenanceAllRows: ComplaintListRow[] = [];
+  maintenanceAllLoading = false;
+  maintenanceAllPagination = { page: 1, limit: 20, total: 0, totalPages: 1 };
+  maintenanceAllPageInput = 1;
+  maintenanceAllFilterClinicId: number | '' = '';
+  maintenanceAllFilterStatus = '';
+  maintenanceAllFilterPriority = '';
+  complaintDetailId: number | null = null;
+  complaintDetailReturnKey = 'maintenance-my';
+  complaintDetail: ComplaintDetailDto | null = null;
+  complaintDetailLoading = false;
+  maintenanceStatusForm: { status: string; message: string; rejectionReason: string } = {
+    status: '',
+    message: '',
+    rejectionReason: ''
+  };
+  maintenanceStatusSubmitting = false;
+  maintenanceCommentText = '';
+  maintenanceCommentSubmitting = false;
+  maintenanceAssignUserId: number | '' = '';
+  maintenanceAssignSubmitting = false;
+  maintenanceAssignStaffOptions: Array<{ userId: number; username: string; email: string }> = [];
+  maintenanceDeleteSubmitting = false;
+  attachmentPreviewUrl: string | null = null;
+  attachmentPreviewName = '';
+  sanitizedAttachmentPreview: SafeResourceUrl | null = null;
 
   financialDashboard: {
     totalIncome: number;
@@ -724,6 +833,8 @@ export class HomeComponent implements OnInit {
       this.authSession.ensureDefaultSelectedClinic();
       this.syncSelectedClinicUiFromSession();
       this.applyStaffSidebarRestrictions();
+      this.applyMaintenanceNav();
+      this.applyConfigurationNav();
       this.loadSidebarFavorites();
       this.loadOrganisation();
       this.loadActiveDoctorsForDropdowns();
@@ -769,6 +880,9 @@ export class HomeComponent implements OnInit {
   }
 
   get showClinicSwitcher(): boolean {
+    if (this.active === 'config-workflows' || this.active === 'config-workflow-builder') {
+      return false;
+    }
     return this.canManageUserAccounts && this.clinicSwitcherOptions.length > 0;
   }
 
@@ -882,6 +996,17 @@ export class HomeComponent implements OnInit {
       ]
     },
     {
+      key: 'maintenance',
+      label: 'Maintenance',
+      iconText: 'MT',
+      expanded: false,
+      children: [
+        { key: 'maintenance-raise', label: 'Raise Complaint', iconText: '+' },
+        { key: 'maintenance-my', label: 'My Complaints', iconText: 'MC' },
+        { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' }
+      ]
+    },
+    {
       key: 'transactions',
       label: 'Transactions',
       iconText: 'TX',
@@ -911,9 +1036,29 @@ export class HomeComponent implements OnInit {
   ];
 
   get activeLabel(): string {
+    if (this.active === 'maintenance-detail') {
+      return 'Complaint details';
+    }
+    if (this.active === 'config-workflows') {
+      return 'Workflows';
+    }
+    if (this.active === 'config-workflow-builder') {
+      return 'Workflow editor';
+    }
     const item = this.findItemByKey(this.sidebarItems, this.active);
     return item ? item.label : 'Module';
   }
+
+  get isMaintenanceModule(): boolean {
+    return this.active.startsWith('maintenance-');
+  }
+
+  get isConfigurationModule(): boolean {
+    return this.active === 'config-workflows' || this.active === 'config-workflow-builder';
+  }
+
+  /** Admin workflow builder target; set when opening from the list. */
+  workflowBuilderId: number | null = null;
 
   get isTransactionsModule(): boolean {
     return this.active.startsWith('transactions-');
@@ -1039,6 +1184,9 @@ export class HomeComponent implements OnInit {
   }
 
   isSidebarParentActive(item: SidebarItem): boolean {
+    if (item.key === 'configuration') {
+      return this.active === 'config-workflows' || this.active === 'config-workflow-builder';
+    }
     return (
       this.active === item.key ||
       (!!item.children && item.children.some((c) => c.key === this.active))
@@ -1088,6 +1236,69 @@ export class HomeComponent implements OnInit {
     if (tx?.children?.length) {
       tx.children = tx.children.filter((c) => c.key !== 'transactions-dashboard');
     }
+  }
+
+  private applyConfigurationNav(): void {
+    if (!this.canManageUserAccounts) return;
+    if (this.sidebarItems.some((i) => i.key === 'configuration')) return;
+    const settingsIdx = this.sidebarItems.findIndex((i) => i.key === 'settings');
+    const cfg: SidebarItem = {
+      key: 'configuration',
+      label: 'Configuration',
+      iconText: 'CF',
+      expanded: false,
+      children: [{ key: 'config-workflows', label: 'Workflows', iconText: 'WF' }]
+    };
+    if (settingsIdx >= 0) {
+      this.sidebarItems.splice(settingsIdx, 0, cfg);
+    } else {
+      this.sidebarItems.push(cfg);
+    }
+  }
+
+  openWorkflowBuilder(workflowId: number): void {
+    if (!this.canManageUserAccounts) return;
+    this.workflowBuilderId = workflowId;
+    const cfg = this.sidebarItems.find((i) => i.key === 'configuration');
+    if (cfg) cfg.expanded = true;
+    this.active = 'config-workflow-builder';
+    this.columnFilters = {};
+  }
+
+  backFromWorkflowBuilder(): void {
+    this.active = 'config-workflows';
+    this.columnFilters = {};
+  }
+
+  private applyMaintenanceNav(): void {
+    const idx = this.sidebarItems.findIndex((i) => i.key === 'maintenance');
+    if (idx < 0) return;
+    const allChildren: SidebarItem[] = [
+      { key: 'maintenance-raise', label: 'Raise Complaint', iconText: '+' },
+      { key: 'maintenance-my', label: 'My Complaints', iconText: 'MC' },
+      { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' }
+    ];
+    const role = this.user?.role;
+    let children: SidebarItem[] = [];
+    if (this.canManageUserAccounts) {
+      children = allChildren.filter((c) => c.key === 'maintenance-all');
+    } else if (role === 'Staff') {
+      children = allChildren.filter(
+        (c) => c.key === 'maintenance-raise' || c.key === 'maintenance-my'
+      );
+    } else if (role === 'Doctor') {
+      children = allChildren.filter((c) => c.key === 'maintenance-my');
+    }
+    if (!children.length) {
+      this.sidebarItems = this.sidebarItems.filter((i) => i.key !== 'maintenance');
+      return;
+    }
+    const prev = this.sidebarItems[idx];
+    this.sidebarItems[idx] = {
+      ...prev,
+      children,
+      expanded: prev.expanded ?? false
+    };
   }
 
   onUserAccountActiveChange(row: { userId?: number; userAccountActive?: boolean }, enabled: boolean): void {
@@ -1147,6 +1358,15 @@ export class HomeComponent implements OnInit {
   }
 
   setActive(key: string): void {
+    if (
+      (key === 'config-workflows' || key === 'config-workflow-builder') &&
+      !this.canManageUserAccounts
+    ) {
+      key = 'dashboard';
+    }
+    if (key === 'config-workflow-builder' && this.workflowBuilderId == null) {
+      key = 'config-workflows';
+    }
     if (!this.canManageUserAccounts && key.startsWith('clinic-')) {
       key = 'dashboard';
     }
@@ -1156,6 +1376,29 @@ export class HomeComponent implements OnInit {
       } else if (key === 'transactions-dashboard') {
         key = 'transactions-billing';
       }
+    }
+    if (key === 'maintenance-raise' && this.user?.role !== 'Staff') {
+      key = 'dashboard';
+    }
+    if (
+      key === 'maintenance-my' &&
+      this.user?.role !== 'Staff' &&
+      this.user?.role !== 'Doctor'
+    ) {
+      key = this.canManageUserAccounts ? 'maintenance-all' : 'dashboard';
+    }
+    if (key === 'maintenance-all' && !this.canManageUserAccounts) {
+      key = 'dashboard';
+    }
+    if (key.startsWith('maintenance-')) {
+      const m = this.sidebarItems.find((i) => i.key === 'maintenance');
+      if (m) {
+        m.expanded = true;
+      }
+    }
+    if (key === 'config-workflows') {
+      const c = this.sidebarItems.find((i) => i.key === 'configuration');
+      if (c) c.expanded = true;
     }
     this.active = key;
     this.columnFilters = {}; // Clear filters when switching pages
@@ -1236,6 +1479,15 @@ export class HomeComponent implements OnInit {
       } else if (key === 'documents-all') {
         this.loadDocumentsBrowse();
       }
+    }
+    if (key === 'maintenance-my') {
+      this.loadMaintenanceMyComplaints();
+    }
+    if (key === 'maintenance-all') {
+      this.loadMaintenanceAllComplaints(1);
+    }
+    if (key === 'maintenance-raise') {
+      this.resetMaintenanceRaiseForm();
     }
   }
 
@@ -2384,53 +2636,59 @@ export class HomeComponent implements OnInit {
 
   downloadExcel(records: Array<Record<string, any>>, filename = 'register-table.xlsx') {
     if (!records || records.length === 0) return;
-    const ws = XLSX.utils.json_to_sheet(records);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-    XLSX.writeFile(wb, filename);
+    void import('xlsx').then((XLSX) => {
+      const ws = XLSX.utils.json_to_sheet(records);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      XLSX.writeFile(wb, filename);
+    });
   }
 
   downloadPdf(records: Array<Record<string, any>>, filename = 'register-table.pdf') {
     if (!records || records.length === 0) return;
-    const doc = new jsPDF();
+    void Promise.all([import('jspdf'), import('jspdf-autotable')]).then(([jsPDFMod, autoTableMod]) => {
+      const jsPDF = jsPDFMod.default;
+      const autoTable = autoTableMod.default;
+      const doc = new jsPDF();
 
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const headerH = this.organisation.headerImage ? 20 : 0;
-    const footerH = this.organisation.footerImage ? 18 : 0;
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const headerH = this.organisation.headerImage ? 20 : 0;
+      const footerH = this.organisation.footerImage ? 18 : 0;
 
-    const imageFormat = (dataUrl: string): 'PNG' | 'JPEG' => {
-      return dataUrl.includes('image/jpeg') || dataUrl.includes('image/jpg') ? 'JPEG' : 'PNG';
-    };
+      const imageFormat = (dataUrl: string): 'PNG' | 'JPEG' => {
+        return dataUrl.includes('image/jpeg') || dataUrl.includes('image/jpg') ? 'JPEG' : 'PNG';
+      };
 
-    const drawBranding = () => {
-      if (this.organisation.headerImage && this.organisation.headerImage.startsWith('data:image')) {
-        doc.addImage(this.organisation.headerImage, imageFormat(this.organisation.headerImage), 0, 0, pageW, headerH || 20);
-      }
-      if (this.organisation.footerImage && this.organisation.footerImage.startsWith('data:image')) {
-        doc.addImage(this.organisation.footerImage, imageFormat(this.organisation.footerImage), 0, pageH - (footerH || 18), pageW, footerH || 18);
-      }
-      if (this.organisation.addSeal && this.organisation.sealImage && this.organisation.sealImage.startsWith('data:image')) {
-        const sealSize = 26;
-        doc.addImage(
-          this.organisation.sealImage,
-          imageFormat(this.organisation.sealImage),
-          pageW - sealSize - 10,
-          pageH - (footerH || 0) - sealSize - 6,
-          sealSize,
-          sealSize
-        );
-      }
-    };
+      const drawBranding = () => {
+        if (this.organisation.headerImage && this.organisation.headerImage.startsWith('data:image')) {
+          doc.addImage(this.organisation.headerImage, imageFormat(this.organisation.headerImage), 0, 0, pageW, headerH || 20);
+        }
+        if (this.organisation.footerImage && this.organisation.footerImage.startsWith('data:image')) {
+          doc.addImage(this.organisation.footerImage, imageFormat(this.organisation.footerImage), 0, pageH - (footerH || 18), pageW, footerH || 18);
+        }
+        if (this.organisation.addSeal && this.organisation.sealImage && this.organisation.sealImage.startsWith('data:image')) {
+          const sealSize = 26;
+          doc.addImage(
+            this.organisation.sealImage,
+            imageFormat(this.organisation.sealImage),
+            pageW - sealSize - 10,
+            pageH - (footerH || 0) - sealSize - 6,
+            sealSize,
+            sealSize
+          );
+        }
+      };
 
-    autoTable(doc, {
-      head: [Object.keys(records[0])],
-      body: records.map(r => Object.values(r)),
-      startY: headerH + 8,
-      margin: { bottom: footerH + 8, left: 10, right: 10 },
-      didDrawPage: () => drawBranding()
+      autoTable(doc, {
+        head: [Object.keys(records[0])],
+        body: records.map((r) => Object.values(r)),
+        startY: headerH + 8,
+        margin: { bottom: footerH + 8, left: 10, right: 10 },
+        didDrawPage: () => drawBranding()
+      });
+      doc.save(filename);
     });
-    doc.save(filename);
   }
 
   toggleDownloadDropdown(type: 'table' | 'row', row?: Record<string, any>, event?: MouseEvent) {
@@ -3862,80 +4120,84 @@ export class HomeComponent implements OnInit {
         next: (res) => {
           const bill = res?.bill;
           if (!bill) return;
-          const doc = new jsPDF();
-          const pageW = doc.internal.pageSize.getWidth();
-          const pageH = doc.internal.pageSize.getHeight();
-          const headerH = this.organisation.headerImage ? 20 : 0;
-          const footerH = this.organisation.footerImage ? 18 : 0;
-          const imageFormat = (dataUrl: string): 'PNG' | 'JPEG' =>
-            dataUrl.includes('image/jpeg') || dataUrl.includes('image/jpg') ? 'JPEG' : 'PNG';
-          const drawBranding = () => {
-            if (this.organisation.headerImage && this.organisation.headerImage.startsWith('data:image')) {
-              doc.addImage(
-                this.organisation.headerImage,
-                imageFormat(this.organisation.headerImage),
-                0,
-                0,
-                pageW,
-                headerH || 20
-              );
-            }
-            if (this.organisation.footerImage && this.organisation.footerImage.startsWith('data:image')) {
-              doc.addImage(
-                this.organisation.footerImage,
-                imageFormat(this.organisation.footerImage),
-                0,
-                pageH - (footerH || 18),
-                pageW,
-                footerH || 18
-              );
-            }
-            if (this.organisation.addSeal && this.organisation.sealImage && this.organisation.sealImage.startsWith('data:image')) {
-              const sealSize = 26;
-              doc.addImage(
-                this.organisation.sealImage,
-                imageFormat(this.organisation.sealImage),
-                pageW - sealSize - 10,
-                pageH - (footerH || 0) - sealSize - 6,
-                sealSize,
-                sealSize
-              );
-            }
-          };
-          let y = headerH + 10;
-          doc.setFontSize(16);
-          doc.text('Invoice / Bill', 14, y);
-          y += 8;
-          doc.setFontSize(10);
-          doc.text(String(this.organisation.name || 'Dental Clinic'), 14, y);
-          y += 6;
-          doc.text(`Bill #${bill.id} · ${bill.patientName}`, 14, y);
-          y += 5;
-          doc.text(`Bill date: ${bill.billDate} · Status: ${bill.status}`, 14, y);
-          y += 5;
-          doc.text(
-            `Subtotal ${this.formatMoney(bill.totalAmount)} · Discount ${this.formatMoney(bill.discount)} · Final ${this.formatMoney(
-              bill.finalAmount
-            )}`,
-            14,
-            y
-          );
-          y += 5;
-          doc.text(`Paid to date: ${this.formatMoney(bill.paidAmount)}`, 14, y);
-          y += 8;
-          const body = (bill.items || []).map((it) => {
-            const q = Number(it.quantity) || 1;
-            const p = Number(it.price) || 0;
-            return [it.itemName, String(q), this.formatMoney(p), this.formatMoney(q * p)];
+          void Promise.all([import('jspdf'), import('jspdf-autotable')]).then(([jsPDFMod, autoTableMod]) => {
+            const jsPDF = jsPDFMod.default;
+            const autoTable = autoTableMod.default;
+            const doc = new jsPDF();
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const headerH = this.organisation.headerImage ? 20 : 0;
+            const footerH = this.organisation.footerImage ? 18 : 0;
+            const imageFormat = (dataUrl: string): 'PNG' | 'JPEG' =>
+              dataUrl.includes('image/jpeg') || dataUrl.includes('image/jpg') ? 'JPEG' : 'PNG';
+            const drawBranding = () => {
+              if (this.organisation.headerImage && this.organisation.headerImage.startsWith('data:image')) {
+                doc.addImage(
+                  this.organisation.headerImage,
+                  imageFormat(this.organisation.headerImage),
+                  0,
+                  0,
+                  pageW,
+                  headerH || 20
+                );
+              }
+              if (this.organisation.footerImage && this.organisation.footerImage.startsWith('data:image')) {
+                doc.addImage(
+                  this.organisation.footerImage,
+                  imageFormat(this.organisation.footerImage),
+                  0,
+                  pageH - (footerH || 18),
+                  pageW,
+                  footerH || 18
+                );
+              }
+              if (this.organisation.addSeal && this.organisation.sealImage && this.organisation.sealImage.startsWith('data:image')) {
+                const sealSize = 26;
+                doc.addImage(
+                  this.organisation.sealImage,
+                  imageFormat(this.organisation.sealImage),
+                  pageW - sealSize - 10,
+                  pageH - (footerH || 0) - sealSize - 6,
+                  sealSize,
+                  sealSize
+                );
+              }
+            };
+            let y = headerH + 10;
+            doc.setFontSize(16);
+            doc.text('Invoice / Bill', 14, y);
+            y += 8;
+            doc.setFontSize(10);
+            doc.text(String(this.organisation.name || 'Dental Clinic'), 14, y);
+            y += 6;
+            doc.text(`Bill #${bill.id} · ${bill.patientName}`, 14, y);
+            y += 5;
+            doc.text(`Bill date: ${bill.billDate} · Status: ${bill.status}`, 14, y);
+            y += 5;
+            doc.text(
+              `Subtotal ${this.formatMoney(bill.totalAmount)} · Discount ${this.formatMoney(bill.discount)} · Final ${this.formatMoney(
+                bill.finalAmount
+              )}`,
+              14,
+              y
+            );
+            y += 5;
+            doc.text(`Paid to date: ${this.formatMoney(bill.paidAmount)}`, 14, y);
+            y += 8;
+            const body = (bill.items || []).map((it) => {
+              const q = Number(it.quantity) || 1;
+              const p = Number(it.price) || 0;
+              return [it.itemName, String(q), this.formatMoney(p), this.formatMoney(q * p)];
+            });
+            autoTable(doc, {
+              head: [['Item', 'Qty', 'Unit price', 'Line total']],
+              body,
+              startY: y,
+              margin: { bottom: footerH + 8, left: 10, right: 10 },
+              didDrawPage: () => drawBranding()
+            });
+            doc.save(`bill-${bill.id}.pdf`);
           });
-          autoTable(doc, {
-            head: [['Item', 'Qty', 'Unit price', 'Line total']],
-            body,
-            startY: y,
-            margin: { bottom: footerH + 8, left: 10, right: 10 },
-            didDrawPage: () => drawBranding()
-          });
-          doc.save(`bill-${bill.id}.pdf`);
         },
         error: () => {
           window.alert('Could not load bill for PDF.');
@@ -4988,6 +5250,478 @@ export class HomeComponent implements OnInit {
     const s = String(m || 'other');
     if (s === 'upi') return 'UPI';
     return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  resetMaintenanceRaiseForm(): void {
+    this.maintenanceRaiseForm = {
+      title: '',
+      description: '',
+      category: 'other',
+      priority: 'medium',
+      initialMessage: '',
+      file: null
+    };
+    this.maintenanceRaiseError = '';
+  }
+
+  onMaintenanceRaiseFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const f = input.files?.[0];
+    this.maintenanceRaiseForm.file = f || null;
+  }
+
+  private readFileBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const s = String(r.result || '');
+        const i = s.indexOf(',');
+        resolve(i >= 0 ? s.slice(i + 1) : s);
+      };
+      r.onerror = () => reject(new Error('read failed'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  submitMaintenanceRaise(): void {
+    if (this.user?.role !== 'Staff') return;
+    if (!this.requireSingleClinicForCreate()) return;
+    const title = this.maintenanceRaiseForm.title.trim();
+    if (!title) {
+      this.maintenanceRaiseError = 'Title is required.';
+      return;
+    }
+    this.maintenanceRaiseSubmitting = true;
+    this.maintenanceRaiseError = '';
+    const body: Record<string, unknown> = {
+      title,
+      description: this.maintenanceRaiseForm.description.trim() || null,
+      category: this.maintenanceRaiseForm.category,
+      priority: this.maintenanceRaiseForm.priority
+    };
+    const im = this.maintenanceRaiseForm.initialMessage.trim();
+    if (im) {
+      body['initialMessage'] = im;
+    }
+    this.http
+      .post<{
+        complaint: { id: number };
+      }>(this.complaintsApiUrl, body)
+      .subscribe({
+        next: (res) => {
+          const id = res?.complaint?.id;
+          const file = this.maintenanceRaiseForm.file;
+          const finishOk = (): void => {
+            this.maintenanceRaiseSubmitting = false;
+            this.toast.success('Complaint submitted.');
+            this.resetMaintenanceRaiseForm();
+            this.setActive('maintenance-my');
+          };
+          if (id && file) {
+            this.readFileBase64(file).then((data) =>
+              firstValueFrom(
+                this.http.post(this.attachmentApiUrl, {
+                  data,
+                  entityType: 'complaint',
+                  entityId: id,
+                  fileName: file.name,
+                  fileType: file.type || 'application/octet-stream'
+                })
+              )
+                .then(() => finishOk())
+                .catch(() => {
+                  this.maintenanceRaiseSubmitting = false;
+                  this.toast.error('Complaint saved but file upload failed.');
+                  this.resetMaintenanceRaiseForm();
+                  this.setActive('maintenance-my');
+                })
+            );
+            return;
+          }
+          finishOk();
+        },
+        error: (err) => {
+          this.maintenanceRaiseSubmitting = false;
+          this.maintenanceRaiseError = err?.error?.message || 'Could not create complaint.';
+        }
+      });
+  }
+
+  loadMaintenanceMyComplaints(): void {
+    this.maintenanceMyLoading = true;
+    this.http
+      .get<{ complaints: ComplaintListRow[] }>(this.complaintsApiUrl, {
+        params: { page: 1, limit: 500 }
+      })
+      .subscribe({
+        next: (res) => {
+          const uid = Number(this.user?.id);
+          const all = res?.complaints || [];
+          this.maintenanceMyRows = all.filter((c) => c.createdBy === uid);
+          this.maintenanceMyLoading = false;
+        },
+        error: () => {
+          this.maintenanceMyRows = [];
+          this.maintenanceMyLoading = false;
+          this.toast.error('Could not load your complaints.');
+        }
+      });
+  }
+
+  loadMaintenanceAllComplaints(page = 1): void {
+    if (!this.canManageUserAccounts) return;
+    this.maintenanceAllLoading = true;
+    const params: Record<string, string | number> = {
+      page,
+      limit: this.maintenanceAllPagination.limit
+    };
+    if (this.maintenanceAllFilterStatus) {
+      params['status'] = this.maintenanceAllFilterStatus;
+    }
+    if (this.maintenanceAllFilterPriority) {
+      params['priority'] = this.maintenanceAllFilterPriority;
+    }
+    if (
+      this.authSession.isAllClinicsScopeSelected() &&
+      this.maintenanceAllFilterClinicId !== '' &&
+      this.maintenanceAllFilterClinicId != null
+    ) {
+      params['clinicId'] = Number(this.maintenanceAllFilterClinicId);
+    }
+    this.http
+      .get<{
+        complaints: ComplaintListRow[];
+        pagination?: { page: number; limit: number; total: number; totalPages: number };
+      }>(this.complaintsApiUrl, { params })
+      .subscribe({
+        next: (res) => {
+          this.maintenanceAllRows = res?.complaints || [];
+          const pg = res?.pagination;
+          this.maintenanceAllPagination = {
+            page: pg?.page ?? page,
+            limit: pg?.limit ?? this.maintenanceAllPagination.limit,
+            total: pg?.total ?? this.maintenanceAllRows.length,
+            totalPages: pg?.totalPages ?? 1
+          };
+          this.maintenanceAllPageInput = this.maintenanceAllPagination.page;
+          this.maintenanceAllLoading = false;
+        },
+        error: () => {
+          this.maintenanceAllRows = [];
+          this.maintenanceAllLoading = false;
+          this.toast.error('Could not load complaints.');
+        }
+      });
+  }
+
+  applyMaintenanceAllFilters(): void {
+    this.loadMaintenanceAllComplaints(1);
+  }
+
+  maintenanceAllGoPage(dir: 'prev' | 'next'): void {
+    const next =
+      dir === 'next'
+        ? this.maintenanceAllPagination.page + 1
+        : this.maintenanceAllPagination.page - 1;
+    if (next < 1 || next > this.maintenanceAllPagination.totalPages) return;
+    this.loadMaintenanceAllComplaints(next);
+  }
+
+  maintenanceAllGoPageInput(): void {
+    const t = Math.max(
+      1,
+      Math.min(
+        this.maintenanceAllPagination.totalPages,
+        Number(this.maintenanceAllPageInput) || 1
+      )
+    );
+    this.loadMaintenanceAllComplaints(t);
+  }
+
+  openComplaintDetail(id: number, returnKey: string): void {
+    this.complaintDetailReturnKey = returnKey;
+    this.complaintDetailId = id;
+    this.active = 'maintenance-detail';
+    this.maintenanceStatusForm = { status: '', message: '', rejectionReason: '' };
+    this.maintenanceCommentText = '';
+    this.maintenanceAssignUserId = '';
+    this.loadComplaintDetail(id);
+    if (this.canManageUserAccounts) {
+      this.loadMaintenanceAssignStaffOptions();
+    }
+  }
+
+  backFromComplaintDetail(): void {
+    const k = this.complaintDetailReturnKey;
+    this.closeAttachmentPreview();
+    this.complaintDetailId = null;
+    this.complaintDetail = null;
+    this.setActive(k || 'dashboard');
+  }
+
+  loadComplaintDetail(id: number): void {
+    this.complaintDetailLoading = true;
+    this.http
+      .get<{
+        complaint: {
+          id: number;
+          clinicId: number;
+          title: string;
+          description: string | null;
+          category: string;
+          priority: string;
+          status: string;
+          createdBy: number;
+          assignedTo: number | null;
+          rejectionReason: string | null;
+          resolvedAt: string | null;
+          createdAt: string | null;
+          updatedAt: string | null;
+          clinic?: ComplaintClinicRef;
+          createdByStaff?: {
+            user: { id: number; username: string; email: string };
+            staff: {
+              id: number;
+              staffType: string;
+              department: string | null;
+              joiningDate: string | null;
+            } | null;
+          };
+          assignedToUser?: { userId: number; username: string; email: string } | null;
+          updates: ComplaintUpdateDto[];
+          attachments: ComplaintAttachmentMeta[];
+        };
+      }>(`${this.complaintsApiUrl}/${id}`)
+      .subscribe({
+        next: (res) => {
+          this.complaintDetail = res?.complaint || null;
+          if (this.complaintDetail) {
+            this.maintenanceStatusForm.status = this.complaintDetail.status;
+          }
+          this.complaintDetailLoading = false;
+        },
+        error: () => {
+          this.complaintDetail = null;
+          this.complaintDetailLoading = false;
+          this.toast.error('Could not load complaint.');
+        }
+      });
+  }
+
+  loadMaintenanceAssignStaffOptions(): void {
+    this.http
+      .get<{ staff: Array<{ userId: number; username: string; email: string }> }>(
+        this.staffApiUrl,
+        { params: { page: 1, limit: 200 } }
+      )
+      .subscribe({
+        next: (res) => {
+          this.maintenanceAssignStaffOptions = (res?.staff || []).map((s) => ({
+            userId: s.userId,
+            username: s.username,
+            email: s.email
+          }));
+        },
+        error: () => {
+          this.maintenanceAssignStaffOptions = [];
+        }
+      });
+  }
+
+  get canManageComplaintDetail(): boolean {
+    return this.canManageUserAccounts;
+  }
+
+  submitMaintenanceStatus(): void {
+    if (!this.complaintDetailId || !this.canManageUserAccounts) return;
+    const status = this.maintenanceStatusForm.status;
+    const body: Record<string, unknown> = {
+      status,
+      message: this.maintenanceStatusForm.message.trim() || null
+    };
+    if (status === 'rejected') {
+      body['rejectionReason'] = this.maintenanceStatusForm.rejectionReason.trim();
+      if (!body['rejectionReason']) {
+        this.toast.error('Rejection reason is required.');
+        return;
+      }
+    }
+    this.maintenanceStatusSubmitting = true;
+    this.http
+      .patch<{ complaint: ComplaintDetailDto }>(
+        `${this.complaintsApiUrl}/${this.complaintDetailId}/status`,
+        body
+      )
+      .subscribe({
+        next: (res) => {
+          this.maintenanceStatusSubmitting = false;
+          if (res?.complaint) {
+            this.complaintDetail = res.complaint;
+            this.maintenanceStatusForm.message = '';
+            this.maintenanceStatusForm.rejectionReason = '';
+          } else {
+            this.loadComplaintDetail(this.complaintDetailId!);
+          }
+          this.toast.success('Status updated.');
+        },
+        error: (err) => {
+          this.maintenanceStatusSubmitting = false;
+          this.toast.error(err?.error?.message || 'Could not update status.');
+        }
+      });
+  }
+
+  submitMaintenanceComment(): void {
+    if (!this.complaintDetailId || !this.canManageUserAccounts) return;
+    const message = this.maintenanceCommentText.trim();
+    if (!message) {
+      this.toast.error('Enter a message.');
+      return;
+    }
+    this.maintenanceCommentSubmitting = true;
+    this.http
+      .post<{ complaint: ComplaintDetailDto }>(
+        `${this.complaintsApiUrl}/${this.complaintDetailId}/updates`,
+        { message }
+      )
+      .subscribe({
+        next: (res) => {
+          this.maintenanceCommentSubmitting = false;
+          this.maintenanceCommentText = '';
+          if (res?.complaint) {
+            this.complaintDetail = res.complaint;
+          } else {
+            this.loadComplaintDetail(this.complaintDetailId!);
+          }
+          this.toast.success('Update added.');
+        },
+        error: (err) => {
+          this.maintenanceCommentSubmitting = false;
+          this.toast.error(err?.error?.message || 'Could not add update.');
+        }
+      });
+  }
+
+  submitMaintenanceAssign(): void {
+    if (!this.complaintDetailId || !this.canManageUserAccounts) return;
+    const uid = Number(this.maintenanceAssignUserId);
+    if (!Number.isFinite(uid) || uid < 1) {
+      this.toast.error('Select a user to assign.');
+      return;
+    }
+    this.maintenanceAssignSubmitting = true;
+    this.http
+      .patch<{ complaint: ComplaintDetailDto }>(
+        `${this.complaintsApiUrl}/${this.complaintDetailId}/assign`,
+        { assignedTo: uid }
+      )
+      .subscribe({
+        next: (res) => {
+          this.maintenanceAssignSubmitting = false;
+          if (res?.complaint) {
+            this.complaintDetail = res.complaint;
+          } else {
+            this.loadComplaintDetail(this.complaintDetailId!);
+          }
+          this.toast.success('Assignee updated.');
+        },
+        error: (err) => {
+          this.maintenanceAssignSubmitting = false;
+          this.toast.error(err?.error?.message || 'Could not assign.');
+        }
+      });
+  }
+
+  confirmDeleteComplaint(): void {
+    if (!this.complaintDetailId || !this.canManageUserAccounts) return;
+    if (!confirm('Delete this complaint and its history? This cannot be undone.')) return;
+    this.maintenanceDeleteSubmitting = true;
+    this.http.delete(`${this.complaintsApiUrl}/${this.complaintDetailId}`).subscribe({
+      next: () => {
+        this.maintenanceDeleteSubmitting = false;
+        this.toast.success('Complaint deleted.');
+        this.backFromComplaintDetail();
+      },
+      error: (err) => {
+        this.maintenanceDeleteSubmitting = false;
+        this.toast.error(err?.error?.message || 'Could not delete.');
+      }
+    });
+  }
+
+  previewComplaintAttachment(att: ComplaintAttachmentMeta): void {
+    this.http
+      .get<{
+        attachment: { fileName: string; fileType: string; data: string };
+      }>(`${this.attachmentApiUrl}/${att.id}`)
+      .subscribe({
+        next: (res) => {
+          const row = res?.attachment;
+          const raw = row?.data || '';
+          const mime = row?.fileType || att.fileType || 'application/octet-stream';
+          const name = row?.fileName || att.fileName;
+          this.attachmentPreviewName = name;
+          this.sanitizedAttachmentPreview = null;
+          if (mime.startsWith('image/')) {
+            this.attachmentPreviewUrl = `data:${mime};base64,${raw}`;
+          } else {
+            const blob = this.base64ToBlob(raw, mime);
+            if (this.attachmentPreviewUrl?.startsWith('blob:')) {
+              URL.revokeObjectURL(this.attachmentPreviewUrl);
+            }
+            this.attachmentPreviewUrl = URL.createObjectURL(blob);
+            this.sanitizedAttachmentPreview = this.sanitizer.bypassSecurityTrustResourceUrl(
+              this.attachmentPreviewUrl
+            );
+          }
+        },
+        error: () => this.toast.error('Could not load attachment.')
+      });
+  }
+
+  private base64ToBlob(b64: string, mime: string): Blob {
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return new Blob([arr], { type: mime || 'application/octet-stream' });
+  }
+
+  downloadComplaintAttachment(att: ComplaintAttachmentMeta): void {
+    this.http
+      .get<{ attachment: { fileName: string; fileType: string; data: string } }>(
+        `${this.attachmentApiUrl}/${att.id}`
+      )
+      .subscribe({
+        next: (res) => {
+          const row = res?.attachment;
+          const blob = this.base64ToBlob(row?.data || '', row?.fileType || att.fileType);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = row?.fileName || att.fileName || 'download';
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+        error: () => this.toast.error('Could not download.')
+      });
+  }
+
+  closeAttachmentPreview(): void {
+    if (this.attachmentPreviewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(this.attachmentPreviewUrl);
+    }
+    this.attachmentPreviewUrl = null;
+    this.sanitizedAttachmentPreview = null;
+    this.attachmentPreviewName = '';
+  }
+
+  formatComplaintStatusLabel(s: string): string {
+    return String(s || '')
+      .split('_')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
   }
 
   logout(): void {

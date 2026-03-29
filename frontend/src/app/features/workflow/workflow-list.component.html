@@ -1,0 +1,89 @@
+<div class="wf-list-page">
+  <div class="maintenance-toolbar glass-card wf-list-toolbar">
+    <label class="fin-dash-label">
+      Entity type
+      <select class="inventory-select" [(ngModel)]="filterEntityType" (ngModelChange)="load()">
+        <option value="">All</option>
+        <option value="complaint">complaint</option>
+        <option value="appointment">appointment</option>
+      </select>
+    </label>
+    <div class="wf-toolbar-actions">
+      <button
+        type="button"
+        class="btn-icon ghost wf-help-icon-btn"
+        (click)="helpOpen = true"
+        title="How workflows work"
+        aria-label="How workflows work"
+      >
+        ⓘ
+      </button>
+      <button type="button" class="btn-primary" (click)="openCreate()">New workflow</button>
+    </div>
+  </div>
+
+  <p class="muted" *ngIf="loading" style="padding: 16px">Loading…</p>
+
+  <div class="table-card" *ngIf="!loading">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Entity</th>
+            <th>Active</th>
+            <th style="text-align: right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of rows">
+            <td><strong>{{ r.name }}</strong></td>
+            <td><span class="wf-entity-pill">{{ r.entityType }}</span></td>
+            <td>
+              <span class="badge" [class.badge-success]="r.isActive">{{ r.isActive ? 'Active' : 'Inactive' }}</span>
+            </td>
+            <td style="text-align: right">
+              <button type="button" class="table-footer-btn primary" (click)="editInBuilder(r.id)">Open builder</button>
+              <button
+                type="button"
+                class="table-footer-btn"
+                style="margin-left: 6px"
+                [disabled]="patchSubmittingId === r.id"
+                (click)="toggleActive(r)"
+              >
+                {{ r.isActive ? 'Deactivate' : 'Activate' }}
+              </button>
+            </td>
+          </tr>
+          <tr *ngIf="!rows.length">
+            <td colspan="4" class="wf-empty-hint">No workflows yet — create one to design your first flow.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="doctor-modal-backdrop" *ngIf="createOpen" (click)="closeCreate()"></div>
+<div class="doctor-modal" *ngIf="createOpen" (click)="$event.stopPropagation()">
+  <h3>New workflow</h3>
+  <div class="form-group">
+    <label>Name</label>
+    <input [(ngModel)]="createName" maxlength="100" placeholder="Display name" />
+  </div>
+  <div class="form-group">
+    <label>Entity type</label>
+    <select [(ngModel)]="createEntityType">
+      <option value="complaint">complaint</option>
+      <option value="appointment">appointment</option>
+    </select>
+  </div>
+  <div class="doctor-modal-actions">
+    <button type="button" class="table-footer-btn" (click)="closeCreate()">Cancel</button>
+    <button type="button" class="btn-primary" [disabled]="createSubmitting" (click)="submitCreate()">
+      {{ createSubmitting ? 'Creating…' : 'Create' }}
+    </button>
+  </div>
+</div>
+
+<app-workflow-help-modal [(open)]="helpOpen"></app-workflow-help-modal>

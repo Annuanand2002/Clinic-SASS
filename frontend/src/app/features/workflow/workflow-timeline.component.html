@@ -1,0 +1,37 @@
+<div class="wf-timeline-root">
+  <p class="muted" *ngIf="loading">Loading history…</p>
+  <p class="save-error" *ngIf="error && !loading" style="display: inline-block">{{ error }}</p>
+  <ul class="wf-timeline-list" *ngIf="!loading && !error">
+    <li *ngFor="let e of entries; trackBy: trackById" class="wf-timeline-item">
+      <div class="wf-tl-rail" aria-hidden="true">
+        <span class="wf-tl-dot" [attr.data-icon]="entryIcon(e)"></span>
+      </div>
+      <div class="wf-timeline-body">
+        <div
+          class="wf-tl-card"
+          [class.clickable]="collapsible && hasNote(e)"
+          (click)="onCardClick(e)"
+        >
+          <div class="wf-tl-card-head">
+            <span class="wf-tl-icon" aria-hidden="true">{{ entryIcon(e) }}</span>
+            <div class="wf-tl-head-text">
+              <div class="wf-tl-meta">
+                <strong>{{ nodeTitle(e) }}</strong>
+                <span class="muted wf-tl-time">{{ e.createdAt | date: 'medium' }}</span>
+              </div>
+              <div class="wf-tl-action">{{ e.actionTaken || '—' }}</div>
+              <div class="muted wf-tl-actor">{{ actorLabel(e) }}</div>
+            </div>
+            <span class="wf-tl-chevron" *ngIf="collapsible && hasNote(e)" aria-hidden="true">{{
+              isOpen(e) ? '▼' : '▶'
+            }}</span>
+          </div>
+          <div class="wf-tl-message" *ngIf="showNoteInline(e)">
+            <p>{{ e.message }}</p>
+          </div>
+        </div>
+      </div>
+    </li>
+  </ul>
+  <p class="muted" *ngIf="!loading && !error && !entries.length">No workflow history yet.</p>
+</div>

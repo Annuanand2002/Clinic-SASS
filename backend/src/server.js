@@ -8,7 +8,10 @@ const {
   ensureStaffTables,
   ensureInventoryTables,
   ensureFinancialTables,
-  ensureAttachmentMetadataColumns
+  ensureAttachmentMetadataColumns,
+  ensureComplaintTables,
+  ensureAttachmentEntityTypeIncludesComplaint,
+  ensureWorkflowTables
 } = require('./core/db/initSchema');
 
 async function bootstrap() {
@@ -21,6 +24,9 @@ async function bootstrap() {
   await ensureInventoryTables();
   await ensureFinancialTables();
   await ensureAttachmentMetadataColumns();
+  await ensureAttachmentEntityTypeIncludesComplaint();
+  await ensureComplaintTables();
+  await ensureWorkflowTables();
 
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {

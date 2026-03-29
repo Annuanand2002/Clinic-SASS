@@ -8,6 +8,8 @@ import { AppComponent } from './app.component';
 import { AuthInterceptor } from './core/http/auth.interceptor';
 import { LoadingScreenComponent } from './shared/pages/loading-screen.component';
 import { ErrorPageComponent } from './shared/pages/error-page.component';
+import { ServiceWorkerModule } from '@angular/service-worker';
+import { environment } from '../environments/environment';
 
 @NgModule({
   declarations: [
@@ -19,7 +21,13 @@ import { ErrorPageComponent } from './shared/pages/error-page.component';
     BrowserModule,
     BrowserAnimationsModule,
     HttpClientModule,
-    AppRoutingModule
+    AppRoutingModule,
+    ServiceWorkerModule.register('ngsw-worker.js', {
+      enabled: environment.production,
+      // Register the ServiceWorker as soon as the application is stable
+      // or after 30 seconds (whichever comes first).
+      registrationStrategy: 'registerWhenStable:30000'
+    })
   ],
   providers: [
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }

@@ -49,7 +49,7 @@ async function createAppointmentHandler(req, res, next) {
       return res.status(409).json({ message: 'Doctor is not available for this timeslot.' });
     }
 
-    await createAppointment(payload, req.clinicId);
+    await createAppointment(payload, req.clinicId, scopeFromReq(req));
     const result = await listAppointments(
       page,
       limit,

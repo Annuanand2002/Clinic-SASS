@@ -1,0 +1,33 @@
+<div
+  class="wf-cn"
+  [class.selected]="selected"
+  [class.link-src]="isLinkSource"
+  [class.exec-active]="executionActive"
+  [attr.data-nt]="nodeType"
+  (click)="onBody($event)"
+>
+  <button
+    type="button"
+    class="wf-port wf-in"
+    *ngIf="showInPort"
+    title="Connect to this node"
+    (click)="onIn($event)"
+  ></button>
+  <div class="wf-cn-inner">
+    <div class="wf-cn-title-row">
+      <span class="wf-cn-icon" aria-hidden="true">{{ typeIcon }}</span>
+      <div class="wf-cn-title">{{ title || '—' }}</div>
+    </div>
+    <div class="wf-cn-meta">
+      <span class="wf-cn-type-badge">{{ nodeType }}</span>
+      <span class="wf-cn-sub muted" *ngIf="subtitle">{{ subtitle }}</span>
+    </div>
+  </div>
+  <button
+    type="button"
+    class="wf-port wf-out"
+    *ngIf="showOutPort"
+    title="Start connection from here"
+    (click)="onOut($event)"
+  ></button>
+</div>

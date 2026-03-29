@@ -3067,6 +3067,343 @@
       </div>
     </section>
 
+    <section class="register-page maintenance-page" *ngIf="active === 'maintenance-raise'" @cardStagger>
+      <div class="register-header">
+        <div>
+          <h2>Raise complaint</h2>
+          <p class="muted">Submit a maintenance issue for your clinic. Your clinic is set automatically from your account.</p>
+        </div>
+      </div>
+      <div class="setting-card" style="max-width: 640px;">
+        <p class="save-error" *ngIf="maintenanceRaiseError">{{ maintenanceRaiseError }}</p>
+        <div class="form-group">
+          <label for="m-title">Title *</label>
+          <input id="m-title" [(ngModel)]="maintenanceRaiseForm.title" maxlength="150" placeholder="Short summary" />
+        </div>
+        <div class="form-group">
+          <label for="m-desc">Description</label>
+          <textarea id="m-desc" [(ngModel)]="maintenanceRaiseForm.description" rows="4" placeholder="What happened?"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="m-cat">Category</label>
+          <select id="m-cat" [(ngModel)]="maintenanceRaiseForm.category">
+            <option value="equipment">Equipment</option>
+            <option value="electric">Electric</option>
+            <option value="software">Software</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="m-pri">Priority</label>
+          <select id="m-pri" [(ngModel)]="maintenanceRaiseForm.priority">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="m-init">Optional note (first timeline entry)</label>
+          <textarea id="m-init" [(ngModel)]="maintenanceRaiseForm.initialMessage" rows="2" placeholder="Optional context"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="m-file">Attachment (optional)</label>
+          <input id="m-file" type="file" (change)="onMaintenanceRaiseFile($event)" />
+        </div>
+        <button class="btn-primary" type="button" [disabled]="maintenanceRaiseSubmitting" (click)="submitMaintenanceRaise()">
+          {{ maintenanceRaiseSubmitting ? 'Submitting…' : 'Submit complaint' }}
+        </button>
+      </div>
+    </section>
+
+    <section class="register-page maintenance-page" *ngIf="active === 'maintenance-my'" @cardStagger>
+      <div class="register-header">
+        <div>
+          <h2>My complaints</h2>
+          <p class="muted">Complaints you created at this clinic.</p>
+        </div>
+      </div>
+      <div class="table-card">
+        <p class="muted" *ngIf="maintenanceMyLoading" style="padding:16px;">Loading…</p>
+        <div class="table-wrap" *ngIf="!maintenanceMyLoading">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                *ngFor="let row of maintenanceMyRows"
+                class="click-row"
+                (click)="openComplaintDetail(row.id, 'maintenance-my')"
+              >
+                <td><strong>{{ row.title }}</strong></td>
+                <td>{{ row.category }}</td>
+                <td><span class="badge">{{ row.priority }}</span></td>
+                <td><span class="badge">{{ formatComplaintStatusLabel(row.status) }}</span></td>
+                <td class="muted">{{ row.createdAt | date: 'medium' }}</td>
+              </tr>
+              <tr *ngIf="!maintenanceMyRows.length">
+                <td colspan="5" class="muted" style="text-align:center;padding:20px;">No complaints yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="register-page maintenance-page" *ngIf="active === 'maintenance-all' && canManageUserAccounts" @cardStagger>
+      <div class="register-header">
+        <div>
+          <h2>All complaints</h2>
+          <p class="muted">Manage complaints for your organisation. Use the clinic switcher for scope; when “All clinics” is on, filter by clinic below.</p>
+        </div>
+      </div>
+      <div class="maintenance-toolbar glass-card">
+        <ng-container *ngIf="isAllClinicsScope">
+          <label class="fin-dash-label">Clinic
+            <select class="inventory-select" [(ngModel)]="maintenanceAllFilterClinicId" (ngModelChange)="applyMaintenanceAllFilters()">
+              <option [ngValue]="''">All clinics</option>
+              <option *ngFor="let c of clinicSwitcherOptions" [ngValue]="c.id">{{ c.name }}</option>
+            </select>
+          </label>
+        </ng-container>
+        <label class="fin-dash-label">Status
+          <select class="inventory-select" [(ngModel)]="maintenanceAllFilterStatus" (ngModelChange)="applyMaintenanceAllFilters()">
+            <option value="">Any</option>
+            <option value="open">Open</option>
+            <option value="acknowledged">Acknowledged</option>
+            <option value="in_progress">In progress</option>
+            <option value="resolved">Resolved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </label>
+        <label class="fin-dash-label">Priority
+          <select class="inventory-select" [(ngModel)]="maintenanceAllFilterPriority" (ngModelChange)="applyMaintenanceAllFilters()">
+            <option value="">Any</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-card">
+        <p class="muted" *ngIf="maintenanceAllLoading" style="padding:16px;">Loading…</p>
+        <div class="table-wrap" *ngIf="!maintenanceAllLoading">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Clinic</th>
+                <th>Category</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Assigned</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                *ngFor="let row of maintenanceAllRows"
+                class="click-row"
+                (click)="openComplaintDetail(row.id, 'maintenance-all')"
+              >
+                <td><strong>{{ row.title }}</strong></td>
+                <td>{{ row.clinic?.name || '—' }}</td>
+                <td>{{ row.category }}</td>
+                <td><span class="badge">{{ row.priority }}</span></td>
+                <td><span class="badge">{{ formatComplaintStatusLabel(row.status) }}</span></td>
+                <td class="muted">{{ row.assignedToUser?.username || '—' }}</td>
+                <td class="muted">{{ row.createdAt | date: 'medium' }}</td>
+              </tr>
+              <tr *ngIf="!maintenanceAllRows.length">
+                <td colspan="7" class="muted" style="text-align:center;padding:20px;">No complaints match filters.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer" *ngIf="!maintenanceAllLoading && maintenanceAllPagination.totalPages > 1">
+          <div class="table-footer-inner">
+            <span class="table-footer-meta">Page {{ maintenanceAllPagination.page }} / {{ maintenanceAllPagination.totalPages }}</span>
+            <div class="table-footer-controls">
+              <button type="button" class="table-footer-btn" (click)="maintenanceAllGoPage('prev')" [disabled]="maintenanceAllPagination.page <= 1">Prev</button>
+              <button type="button" class="table-footer-btn" (click)="maintenanceAllGoPage('next')" [disabled]="maintenanceAllPagination.page >= maintenanceAllPagination.totalPages">Next</button>
+              <input type="number" class="table-footer-input" [(ngModel)]="maintenanceAllPageInput" (keydown.enter)="maintenanceAllGoPageInput()" />
+              <button type="button" class="table-footer-btn primary" (click)="maintenanceAllGoPageInput()">Go</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="register-page maintenance-page maintenance-detail-page" *ngIf="active === 'maintenance-detail'" @cardStagger>
+      <div class="register-header">
+        <button type="button" class="btn-icon ghost" (click)="backFromComplaintDetail()">← Back</button>
+      </div>
+      <p class="muted" *ngIf="complaintDetailLoading">Loading complaint…</p>
+      <ng-container *ngIf="!complaintDetailLoading && complaintDetail as d">
+        <div class="maintenance-detail-head">
+          <h2>{{ d.title }}</h2>
+          <div class="maintenance-badges">
+            <span class="badge">{{ formatComplaintStatusLabel(d.status) }}</span>
+            <span class="badge">{{ d.priority }}</span>
+            <span class="badge">{{ d.category }}</span>
+          </div>
+        </div>
+        <p class="module-empty" *ngIf="user?.role === 'Staff' && d.status !== 'open'" style="margin-top:12px;">
+          <span class="empty-title">Read-only</span>
+          <span class="empty-sub">This complaint is being processed. You can view details and history only.</span>
+        </p>
+        <div class="glass-card maintenance-detail-grid">
+          <div>
+            <h3 class="mini-title">Description</h3>
+            <p>{{ d.description || '—' }}</p>
+            <h3 class="mini-title" style="margin-top:14px;">Clinic</h3>
+            <p>{{ d.clinic?.name || '—' }}<span *ngIf="d.clinic?.phone"> · {{ d.clinic?.phone }}</span></p>
+            <h3 class="mini-title" style="margin-top:14px;">Raised by</h3>
+            <p>
+              {{ d.createdByStaff?.user?.username || '—' }}
+              <span class="muted" *ngIf="d.createdByStaff?.staff"> · {{ d.createdByStaff?.staff?.staffType }}<span *ngIf="d.createdByStaff?.staff?.department">, {{ d.createdByStaff?.staff?.department }}</span></span>
+            </p>
+            <h3 class="mini-title" style="margin-top:14px;">Assigned to</h3>
+            <p>{{ d.assignedToUser?.username || '—' }}</p>
+            <p *ngIf="d.rejectionReason" class="save-error" style="margin-top:10px;">Rejection reason: {{ d.rejectionReason }}</p>
+          </div>
+          <div *ngIf="canManageComplaintDetail" class="maintenance-admin-panel">
+            <h3 class="mini-title">Change status</h3>
+            <div class="form-group">
+              <select [(ngModel)]="maintenanceStatusForm.status">
+                <option value="open">Open</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="in_progress">In progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Message (optional)</label>
+              <textarea rows="2" [(ngModel)]="maintenanceStatusForm.message" placeholder="Note for timeline"></textarea>
+            </div>
+            <div class="form-group" *ngIf="maintenanceStatusForm.status === 'rejected'">
+              <label>Rejection reason *</label>
+              <textarea rows="2" [(ngModel)]="maintenanceStatusForm.rejectionReason" placeholder="Required when rejecting"></textarea>
+            </div>
+            <button class="btn-primary" type="button" [disabled]="maintenanceStatusSubmitting" (click)="submitMaintenanceStatus()">Update status</button>
+            <h3 class="mini-title" style="margin-top:18px;">Add comment</h3>
+            <div class="form-group">
+              <textarea rows="2" [(ngModel)]="maintenanceCommentText" placeholder="Comment (logged on timeline)"></textarea>
+            </div>
+            <button class="btn-primary" type="button" [disabled]="maintenanceCommentSubmitting" (click)="submitMaintenanceComment()">Add update</button>
+            <h3 class="mini-title" style="margin-top:18px;">Assign</h3>
+            <div class="form-group">
+              <select [(ngModel)]="maintenanceAssignUserId">
+                <option [ngValue]="''">Select staff user…</option>
+                <option *ngFor="let s of maintenanceAssignStaffOptions" [ngValue]="s.userId">{{ s.username }} ({{ s.email }})</option>
+              </select>
+            </div>
+            <button class="btn-primary" type="button" [disabled]="maintenanceAssignSubmitting" (click)="submitMaintenanceAssign()">Assign</button>
+            <h3 class="mini-title" style="margin-top:18px;color:#b91c1c;">Danger zone</h3>
+            <button type="button" class="table-footer-btn" style="border-color:#fecaca;color:#b91c1c;" [disabled]="maintenanceDeleteSubmitting" (click)="confirmDeleteComplaint()">
+              {{ maintenanceDeleteSubmitting ? 'Deleting…' : 'Delete complaint' }}
+            </button>
+          </div>
+        </div>
+        <app-workflow-execution-panel
+          *ngIf="complaintDetailId"
+          entityType="complaint"
+          [entityId]="complaintDetailId"
+          [canTransition]="canManageUserAccounts"
+        ></app-workflow-execution-panel>
+
+        <div class="glass-card maintenance-attachments" style="margin-top:14px;">
+          <h3 class="mini-title">Attachments</h3>
+          <ul class="maintenance-attach-list" *ngIf="d.attachments.length; else noAtt">
+            <li *ngFor="let a of d.attachments">
+              <span>{{ a.fileName }}</span>
+              <span class="row-actions">
+                <button type="button" class="btn-icon ghost" (click)="previewComplaintAttachment(a)">Preview</button>
+                <button type="button" class="btn-icon ghost" (click)="downloadComplaintAttachment(a)">Download</button>
+              </span>
+            </li>
+          </ul>
+          <ng-template #noAtt><p class="muted">No attachments.</p></ng-template>
+        </div>
+        <div class="glass-card maintenance-timeline" style="margin-top:14px;">
+          <h3 class="mini-title">Timeline</h3>
+          <ul class="maintenance-timeline-list">
+            <li *ngFor="let u of d.updates" class="maintenance-timeline-item">
+              <div class="maintenance-timeline-dot"></div>
+              <div class="maintenance-timeline-body">
+                <div class="maintenance-timeline-meta">
+                  <strong>{{ formatComplaintStatusLabel(u.status) }}</strong>
+                  <span class="muted">{{ u.createdAt | date: 'medium' }}</span>
+                </div>
+                <div class="muted">{{ u.updatedBy.username }}</div>
+                <p *ngIf="u.message">{{ u.message }}</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </ng-container>
+    </section>
+
+    <section
+      class="register-page maintenance-page"
+      *ngIf="active === 'config-workflows' && canManageUserAccounts"
+      @cardStagger
+    >
+      <div class="register-header wf-config-hero">
+        <div class="wf-config-hero-text">
+          <h2>Workflows</h2>
+          <p class="muted">Define flows per entity type. Only one workflow can be active per type.</p>
+        </div>
+        <div class="wf-config-hero-accent" aria-hidden="true"></div>
+      </div>
+      <app-workflow-list (openBuilder)="openWorkflowBuilder($event)"></app-workflow-list>
+    </section>
+
+    <section
+      class="register-page maintenance-page"
+      *ngIf="active === 'config-workflow-builder' && canManageUserAccounts && workflowBuilderId != null"
+      @cardStagger
+    >
+      <div class="register-header wf-config-hero wf-config-hero--compact">
+        <div class="wf-config-hero-text">
+          <h2>Workflow editor</h2>
+          <p class="muted">Visual graph for this workflow — save when you are done.</p>
+        </div>
+        <div class="wf-config-hero-accent" aria-hidden="true"></div>
+      </div>
+      <app-workflow-builder
+        [workflowId]="workflowBuilderId"
+        (closed)="backFromWorkflowBuilder()"
+      ></app-workflow-builder>
+    </section>
+
+    <div
+      class="doctor-modal-backdrop"
+      *ngIf="attachmentPreviewUrl"
+      (click)="closeAttachmentPreview()"
+      style="z-index: 2500;"
+    >
+      <div class="doctor-modal doc-preview-modal" (click)="$event.stopPropagation()">
+        <div class="doctor-modal-actions" style="margin-bottom:8px;">
+          <strong>{{ attachmentPreviewName }}</strong>
+          <button type="button" class="inventory-help-close" (click)="closeAttachmentPreview()">×</button>
+        </div>
+        <div class="doc-preview-body">
+          <img *ngIf="attachmentPreviewUrl.startsWith('data:')" [src]="attachmentPreviewUrl" alt="Preview" style="max-width:100%;max-height:70vh;" />
+          <iframe *ngIf="sanitizedAttachmentPreview" [src]="sanitizedAttachmentPreview" style="width:100%;min-height:400px;border:0;"></iframe>
+        </div>
+      </div>
+    </div>
+
     <section
       class="module-empty"
       *ngIf="
@@ -3082,7 +3419,9 @@
         active !== 'inventory-register' &&
         active !== 'inventory-report' &&
         !isTransactionsModule &&
-        !isDocumentsModule
+        !isDocumentsModule &&
+        !isMaintenanceModule &&
+        !isConfigurationModule
       "
       @cardStagger
     >
