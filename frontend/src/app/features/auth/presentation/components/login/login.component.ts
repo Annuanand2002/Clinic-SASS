@@ -12,8 +12,8 @@ import { animate, state, style, transition, trigger } from '@angular/animations'
   animations: [
     trigger('cardEnter', [
       transition(':enter', [
-        style({ opacity: 0, transform: 'translateY(18px) scale(0.98)' }),
-        animate('520ms cubic-bezier(.2,.9,.2,1)', style({ opacity: 1, transform: 'translateY(0) scale(1)' }))
+        style({ opacity: 0 }),
+        animate('520ms ease-out', style({ opacity: 1 }))
       ])
     ]),
     trigger('shakeOnError', [
@@ -33,9 +33,7 @@ import { animate, state, style, transition, trigger } from '@angular/animations'
         style({ opacity: 0, transform: 'translateY(-6px)' }),
         animate('180ms ease-out', style({ opacity: 1, transform: 'translateY(0)' }))
       ]),
-      transition(':leave', [
-        animate('140ms ease-in', style({ opacity: 0, transform: 'translateY(-4px)' }))
-      ])
+      transition(':leave', [animate('140ms ease-in', style({ opacity: 0, transform: 'translateY(-4px)' }))])
     ])
   ]
 })
@@ -47,10 +45,12 @@ export class LoginComponent {
 
   loading = false;
   errorMessage: string | null = null;
-  successMessage: string | null = null;
-  toastMessage: string | null = null;
+  /** Brief UI state before redirect (matches v3 “Access granted” button). */
+  accessGranted = false;
   loggedInUser: LoginResponse['user'] | null = null;
   shakeState: 'idle' | 'shake' = 'idle';
+  showPassword = false;
+  rememberMe = false;
 
   constructor(
     private readonly fb: FormBuilder,
@@ -77,7 +77,7 @@ export class LoginComponent {
 
   submit(): void {
     this.errorMessage = null;
-    this.successMessage = null;
+    this.accessGranted = false;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       this.triggerShake();
@@ -89,16 +89,14 @@ export class LoginComponent {
     this.authFacade.login(usernameOrEmail!, password!).subscribe({
       next: (res) => {
         this.loggedInUser = res.user;
-        this.successMessage = `Welcome back, ${res.user.username}! Redirecting to dashboard...`;
         this.loading = false;
+        this.accessGranted = true;
         setTimeout(() => this.router.navigate(['/home']), 700);
       },
       error: (err) => {
         this.loading = false;
         this.errorMessage =
-          err?.error?.message ||
-          err?.message ||
-          'Login failed (check backend is running on http://localhost:3005)';
+          err?.error?.message || err?.message || 'Incorrect email or password. Please try again.';
         this.triggerShake();
       }
     });
@@ -113,18 +111,15 @@ export class LoginComponent {
     this.errorMessage = null;
   }
 
-  forgotPassword(event: Event): void {
-    event.preventDefault();
-    this.toastMessage = 'Password reset link will be sent to your registered email. Contact clinic admin if needed.';
-    setTimeout(() => (this.toastMessage = null), 3000);
+  togglePassword(): void {
+    this.showPassword = !this.showPassword;
   }
 
   logout(): void {
     this.authFacade.logout();
     this.loggedInUser = null;
-    this.successMessage = null;
+    this.accessGranted = false;
     this.form.reset();
     this.router.navigate(['/login']);
   }
 }
-
