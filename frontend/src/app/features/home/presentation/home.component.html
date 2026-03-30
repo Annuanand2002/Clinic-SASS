@@ -470,35 +470,23 @@
       </div>
     </section>
 
-    <section class="appointment-page" *ngIf="active === 'appointment-register'" @cardStagger>
-      <aside class="appointment-filter">
-        <h4>Appointment Filters</h4>
-        <div class="appointment-filter-actions">
-          <button class="btn-primary" type="button" (click)="openCreateAppointment()">+ New Appointment</button>
-          <button class="btn-icon ghost" type="button" (click)="clearAppointmentFilters()">Clear Filters</button>
-        </div>
-        <div class="form-group">
-          <label>Search</label>
-          <input type="text" [(ngModel)]="appointmentSearch" (input)="onAppointmentSearchInput()" placeholder="Doctor, patient, title..." />
-        </div>
-        <div class="form-group">
-          <label>Date</label>
-          <input type="date" [(ngModel)]="appointmentDateFilter" (change)="applyAppointmentFilters()" />
-        </div>
-        <div class="form-group">
-          <label>Month</label>
-          <input type="month" [(ngModel)]="appointmentMonthFilter" (change)="applyAppointmentFilters()" />
-        </div>
-        <div class="muted" style="font-size:12px;">Tip: click any row to load that date in the Day Schedule panel.</div>
-      </aside>
-
-      <section class="appointment-calendar">
+    <section class="appointment-page appointment-page--table-only" *ngIf="active === 'appointment-register'" @cardStagger>
+      <section class="appointment-calendar appointment-calendar--full">
         <div class="appointment-head">
-          <h3>Appointments List</h3>
-          <span class="pill">{{ appointmentPagination.total }} appointments</span>
+          <h3>Appointments</h3>
+          <span class="pill">{{ appointmentPagination.total }} total</span>
         </div>
-        <div class="muted" style="margin-bottom:8px;">
-          Current month: {{ currentCalendarMonthLabel }}
+        <div class="appointment-register-toolbar">
+          <label class="sr-only" for="appointment-register-search">Search appointments</label>
+          <input
+            id="appointment-register-search"
+            type="search"
+            class="appointment-register-search-input"
+            [(ngModel)]="appointmentSearch"
+            (input)="onAppointmentSearchInput()"
+            placeholder="Search by patient, doctor, or title…"
+            autocomplete="off"
+          />
         </div>
         <div class="table-wrap">
           <table class="register-table appointment-table">
@@ -511,22 +499,82 @@
                 <th>Status</th>
                 <th>Title</th>
               </tr>
+              <tr class="appointment-filter-row">
+                <th>
+                  <input
+                    type="text"
+                    [(ngModel)]="appointmentColumnFilters.date"
+                    (ngModelChange)="onAppointmentColumnFilterChange()"
+                    placeholder="Search date"
+                  />
+                </th>
+                <th>
+                  <input
+                    type="text"
+                    [(ngModel)]="appointmentColumnFilters.time"
+                    (ngModelChange)="onAppointmentColumnFilterChange()"
+                    placeholder="Search time"
+                  />
+                </th>
+                <th>
+                  <input
+                    type="text"
+                    [(ngModel)]="appointmentColumnFilters.patient"
+                    (ngModelChange)="onAppointmentColumnFilterChange()"
+                    placeholder="Search patient"
+                  />
+                </th>
+                <th>
+                  <input
+                    type="text"
+                    [(ngModel)]="appointmentColumnFilters.doctor"
+                    (ngModelChange)="onAppointmentColumnFilterChange()"
+                    placeholder="Search doctor"
+                  />
+                </th>
+                <th>
+                  <select [(ngModel)]="appointmentColumnFilters.status" (ngModelChange)="onAppointmentColumnFilterChange()">
+                    <option value="">All</option>
+                    <option value="scheduled">scheduled</option>
+                    <option value="completed">completed</option>
+                    <option value="cancelled">cancelled</option>
+                    <option value="no_show">no_show</option>
+                  </select>
+                </th>
+                <th>
+                  <input
+                    type="text"
+                    [(ngModel)]="appointmentColumnFilters.title"
+                    (ngModelChange)="onAppointmentColumnFilterChange()"
+                    placeholder="Search title"
+                  />
+                </th>
+              </tr>
             </thead>
             <tbody>
-              <tr
-                *ngFor="let item of appointmentRows"
-                (click)="selectAppointmentDate(item.appointmentDate)"
-                [style.background]="selectedAppointmentDate === item.appointmentDate ? 'rgba(79,70,229,0.1)' : null"
-              >
+              <tr *ngFor="let item of appointmentRows">
                 <td>{{ item.appointmentDate }}</td>
                 <td>{{ item.startTime }} - {{ item.endTime }}</td>
                 <td>{{ item.patientName }}</td>
                 <td>{{ item.doctorName }}</td>
-                <td><span class="pill">{{ item.status }}</span></td>
+                <td>
+                  <select
+                    class="appointment-inline-status"
+                    [attr.aria-label]="'Status for appointment ' + item.id"
+                    [value]="item.status"
+                    (change)="updateAppointmentStatus(item, $any($event.target).value)"
+                    [disabled]="appointmentStatusUpdatingId === item.id"
+                  >
+                    <option value="scheduled">scheduled</option>
+                    <option value="completed">completed</option>
+                    <option value="cancelled">cancelled</option>
+                    <option value="no_show">no_show</option>
+                  </select>
+                </td>
                 <td>{{ item.title || 'Appointment' }}</td>
               </tr>
               <tr *ngIf="appointmentRows.length === 0">
-                <td colspan="6" class="muted" style="padding:14px; text-align:center;">No data is present.</td>
+                <td colspan="6" class="muted" style="padding: 14px; text-align: center">No data is present.</td>
               </tr>
             </tbody>
           </table>
@@ -543,19 +591,85 @@
           </div>
         </footer>
       </section>
+    </section>
 
-      <aside class="appointment-details">
-        <h4>Day Schedule</h4>
-        <div class="muted">{{ selectedAppointmentDateLabel }}</div>
-        <div class="schedule-item" *ngFor="let item of selectedDateAppointments">
+    <section class="appointment-all-page" *ngIf="active === 'appointment-all'" @cardStagger>
+      <aside class="appointment-filter appointment-all-toolbar">
+        <h4>All appointments</h4>
+        <p class="muted" style="font-size: 12px; margin: 0 0 10px 0">
+          Calendar view for the whole month. Each day shows how many bookings you have; pick a day to manage them.
+        </p>
+        <div class="appointment-filter-actions">
+          <button class="btn-primary" type="button" (click)="openCreateAppointment()">+ New Appointment</button>
+          <button
+            class="btn-icon ghost"
+            type="button"
+            (click)="loadAllAppointmentsCalendar()"
+            [disabled]="allAppointmentsCalendarLoading"
+          >
+            Refresh
+          </button>
+        </div>
+        <div class="form-group">
+          <label>Month</label>
+          <input
+            type="month"
+            [(ngModel)]="allAppointmentsCalendarMonth"
+            (change)="selectedAllCalendarDate = null; loadAllAppointmentsCalendar()"
+          />
+        </div>
+      </aside>
+
+      <section class="appointment-all-calendar-main">
+        <div class="all-cal-nav">
+          <button type="button" class="btn-icon ghost" (click)="shiftAllAppointmentsCalendarMonth(-1)" aria-label="Previous month">
+            ‹
+          </button>
+          <h3 class="all-cal-title">{{ allAppointmentsCalendarTitle }}</h3>
+          <button type="button" class="btn-icon ghost" (click)="shiftAllAppointmentsCalendarMonth(1)" aria-label="Next month">
+            ›
+          </button>
+          <button type="button" class="btn-primary all-cal-today" (click)="goAllAppointmentsCalendarToday()">Today</button>
+        </div>
+        <div class="muted all-cal-meta" *ngIf="!allAppointmentsCalendarLoading">
+          {{ allAppointmentsCalendarTotal }} in this month
+        </div>
+        <div class="muted all-cal-meta" *ngIf="allAppointmentsCalendarLoading">Loading calendar…</div>
+
+        <div class="all-cal-grid-wrap" *ngIf="!allAppointmentsCalendarLoading && allCalendarWeeks.length">
+          <div class="all-cal-weekdays">
+            <div *ngFor="let w of allCalendarWeekdayLabels" class="all-cal-weekday">{{ w }}</div>
+          </div>
+          <div class="all-cal-week" *ngFor="let week of allCalendarWeeks">
+            <button
+              type="button"
+              *ngFor="let cell of week"
+              class="all-cal-cell"
+              [class.all-cal-cell--muted]="!cell.inMonth"
+              [class.all-cal-cell--selected]="cell.date && selectedAllCalendarDate === cell.date"
+              [class.all-cal-cell--today]="cell.date === todayYmd"
+              [disabled]="!cell.date"
+              (click)="cell.date && selectAllCalendarDate(cell.date)"
+            >
+              <span class="all-cal-daynum">{{ cell.inMonth && cell.date ? cell.date.substring(8, 10) : '' }}</span>
+              <span *ngIf="cell.items.length" class="all-cal-count-pill">{{ cell.items.length }}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="appointment-details appointment-all-day-panel">
+        <h4>Selected day</h4>
+        <div class="muted">{{ selectedAllCalendarDateLabel }}</div>
+        <div class="schedule-item" *ngFor="let item of selectedAllCalendarDayAppointments">
           <div class="schedule-title">{{ item.title || 'Appointment' }}</div>
-          <div class="schedule-meta">{{ item.startTime }} - {{ item.endTime }}</div>
+          <div class="schedule-meta">{{ item.startTime }} – {{ item.endTime }}</div>
           <div class="schedule-meta">Dr: {{ item.doctorName }}</div>
           <div class="schedule-meta">Patient: {{ item.patientName }}</div>
           <div>
-            <label [attr.for]="'appt-status-' + item.id">Status</label>
+            <label [attr.for]="'all-appt-status-' + item.id">Status</label>
             <select
-              [id]="'appt-status-' + item.id"
+              [id]="'all-appt-status-' + item.id"
               [value]="item.status"
               (change)="updateAppointmentStatus(item, $any($event.target).value)"
               [disabled]="appointmentStatusUpdatingId === item.id"
@@ -571,67 +685,73 @@
             <button class="btn-icon ghost" type="button" (click)="deleteAppointment(item)">Delete</button>
           </div>
         </div>
-        <div class="muted" *ngIf="selectedDateAppointments.length === 0">No data is present.</div>
+        <div class="muted" *ngIf="selectedAllCalendarDate && selectedAllCalendarDayAppointments.length === 0">
+          No appointments on this day.
+        </div>
+        <div class="muted" *ngIf="!selectedAllCalendarDate">Select a date on the calendar.</div>
       </aside>
+    </section>
 
-      <div class="doctor-modal-backdrop" *ngIf="appointmentFormOpen">
-        <div class="doctor-modal">
-          <h3>{{ editingAppointmentId ? 'Modify Appointment' : 'Create Appointment' }}</h3>
-          <div class="settings-grid">
-            <div class="form-group">
-              <label>Patient</label>
-              <select [(ngModel)]="appointmentForm.patientId">
-                <option [ngValue]="null">Select patient</option>
-                <option *ngFor="let p of patientRows" [ngValue]="p.id">{{ p.username }} ({{ p.email }})</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Doctor</label>
-              <select [(ngModel)]="appointmentForm.doctorId">
-                <option [ngValue]="null">Select doctor</option>
-                <option *ngFor="let d of activeDoctorRows" [ngValue]="d.id">{{ d.username }} ({{ d.specialization }})</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Date</label>
-              <input type="date" [(ngModel)]="appointmentForm.appointmentDate" />
-            </div>
-            <div class="form-group">
-              <label>Start Time</label>
-              <input type="time" [(ngModel)]="appointmentForm.startTime" />
-            </div>
-            <div class="form-group">
-              <label>End Time</label>
-              <input type="time" [(ngModel)]="appointmentForm.endTime" />
-            </div>
-            <div class="form-group">
-              <label>Status</label>
-              <select [(ngModel)]="appointmentForm.status">
-                <option value="scheduled">scheduled</option>
-                <option value="completed">completed</option>
-                <option value="cancelled">cancelled</option>
-                <option value="no_show">no_show</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Title</label>
-              <input type="text" [(ngModel)]="appointmentForm.title" placeholder="Tooth Extraction" />
-            </div>
-            <div class="form-group">
-              <label>Description</label>
-              <input type="text" [(ngModel)]="appointmentForm.description" placeholder="Reason / notes" />
-            </div>
+    <div
+      class="doctor-modal-backdrop"
+      *ngIf="appointmentFormOpen && active === 'appointment-all'"
+    >
+      <div class="doctor-modal">
+        <h3>{{ editingAppointmentId ? 'Modify Appointment' : 'Create Appointment' }}</h3>
+        <div class="settings-grid">
+          <div class="form-group">
+            <label>Patient</label>
+            <select [(ngModel)]="appointmentForm.patientId">
+              <option [ngValue]="null">Select patient</option>
+              <option *ngFor="let p of patientRows" [ngValue]="p.id">{{ p.username }} ({{ p.email }})</option>
+            </select>
           </div>
-          <div *ngIf="appointmentFormError" class="save-error">{{ appointmentFormError }}</div>
-          <div class="doctor-modal-actions">
-            <button class="btn-primary" type="button" [disabled]="appointmentSubmitting" (click)="saveAppointment()">
-              {{ appointmentSubmitting ? 'Saving...' : (editingAppointmentId ? 'Update Appointment' : 'Create Appointment') }}
-            </button>
-            <button class="btn-icon ghost" type="button" (click)="closeAppointmentForm()">Close</button>
+          <div class="form-group">
+            <label>Doctor</label>
+            <select [(ngModel)]="appointmentForm.doctorId">
+              <option [ngValue]="null">Select doctor</option>
+              <option *ngFor="let d of activeDoctorRows" [ngValue]="d.id">{{ d.username }} ({{ d.specialization }})</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" [(ngModel)]="appointmentForm.appointmentDate" />
+          </div>
+          <div class="form-group">
+            <label>Start Time</label>
+            <input type="time" [(ngModel)]="appointmentForm.startTime" />
+          </div>
+          <div class="form-group">
+            <label>End Time</label>
+            <input type="time" [(ngModel)]="appointmentForm.endTime" />
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select [(ngModel)]="appointmentForm.status">
+              <option value="scheduled">scheduled</option>
+              <option value="completed">completed</option>
+              <option value="cancelled">cancelled</option>
+              <option value="no_show">no_show</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" [(ngModel)]="appointmentForm.title" placeholder="Tooth Extraction" />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input type="text" [(ngModel)]="appointmentForm.description" placeholder="Reason / notes" />
           </div>
         </div>
+        <div *ngIf="appointmentFormError" class="save-error">{{ appointmentFormError }}</div>
+        <div class="doctor-modal-actions">
+          <button class="btn-primary" type="button" [disabled]="appointmentSubmitting" (click)="saveAppointment()">
+            {{ appointmentSubmitting ? 'Saving...' : (editingAppointmentId ? 'Update Appointment' : 'Create Appointment') }}
+          </button>
+          <button class="btn-icon ghost" type="button" (click)="closeAppointmentForm()">Close</button>
+        </div>
       </div>
-    </section>
+    </div>
 
     <section class="inventory-page" *ngIf="active === 'inventory-register'" @cardStagger>
       <div class="inventory-page-head">
@@ -3416,6 +3536,7 @@
         active !== 'doctor-report' &&
         active !== 'patients-report' &&
         active !== 'appointment-report' &&
+        active !== 'appointment-all' &&
         active !== 'inventory-register' &&
         active !== 'inventory-report' &&
         !isTransactionsModule &&

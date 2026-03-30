@@ -63,6 +63,25 @@ async function getPatientRoleId(connection) {
   return Number(roles[0].id);
 }
 
+/** Same email may exist at different clinics; block only duplicate email within the same clinic. */
+async function findOtherPatientUserIdByEmailInClinic(connection, email, clinicId, excludeUserId) {
+  const em = String(email || '').trim().toLowerCase();
+  if (!em) return null;
+  const [rows] = await connection.query(
+    `SELECT u.id AS id
+     FROM users u
+     INNER JOIN patient p ON p.user_id = u.id
+     INNER JOIN user_role r ON r.id = u.role_id
+     WHERE r.role_name = 'Patient'
+       AND LOWER(TRIM(u.email)) = ?
+       AND p.clinic_id = ?
+       ${excludeUserId != null ? 'AND u.id <> ?' : ''}
+     LIMIT 1`,
+    excludeUserId != null ? [em, Number(clinicId), excludeUserId] : [em, Number(clinicId)]
+  );
+  return rows?.[0]?.id != null ? Number(rows[0].id) : null;
+}
+
 async function listPatients(pageInput, limitInput, searchInput, scope) {
   const pool = getPool();
   const { page, limit, offset } = normalizePagination(pageInput, limitInput);
@@ -72,12 +91,13 @@ async function listPatients(pageInput, limitInput, searchInput, scope) {
     ? ` AND (
         u.username LIKE ?
         OR u.email LIKE ?
+        OR p.email LIKE ?
         OR p.blood_group LIKE ?
         OR p.emergency_contact LIKE ?
       )`
     : '';
   const whereSql = `WHERE ${clinicClause}${searchClause}`;
-  const whereParams = [...clinicParam, ...(q ? [`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`] : [])];
+  const whereParams = [...clinicParam, ...(q ? [`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`] : [])];
 
   const [rows] = await pool.query(
     `WITH base AS (
@@ -148,12 +168,19 @@ async function createPatient(payload, actorId, clinicId) {
     );
     const orgId = clinicRows?.[0]?.organization_id != null ? Number(clinicRows[0].organization_id) : null;
 
+    const dupUserId = await findOtherPatientUserIdByEmailInClinic(connection, payload.email, cid, null);
+    if (dupUserId) {
+      const err = new Error('A patient with this email already exists in this clinic');
+      err.statusCode = 409;
+      throw err;
+    }
+
     const generatedPassword = `${String(payload.username || 'patient').toLowerCase().replace(/\s+/g, '')}@123`;
 
     const [userInsert] = await connection.query(
-      `INSERT INTO users (username, email, password, role_id, is_active, organization_id)
-       VALUES (?, ?, ?, ?, 1, ?)`,
-      [payload.username, payload.email, generatedPassword, patientRoleId, orgId]
+      `INSERT INTO users (username, email, password, role_id, is_active, organization_id, clinic_id)
+       VALUES (?, ?, ?, ?, 1, ?, ?)`,
+      [payload.username, payload.email, generatedPassword, patientRoleId, orgId, cid]
     );
 
     const userId = userInsert.insertId;
@@ -192,6 +219,13 @@ async function createPatient(payload, actorId, clinicId) {
     return Number(insertResult.insertId);
   } catch (err) {
     await connection.rollback();
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      const e = new Error(
+        'Could not create patient: this email (or username) may already exist for this clinic, or conflicts with another account.'
+      );
+      e.statusCode = 409;
+      throw e;
+    }
     throw err;
   } finally {
     connection.release();
@@ -219,6 +253,20 @@ async function updatePatient(patientId, payload, actorId, scope) {
     const cid = Number(patient.clinic_id);
 
     if (payload.username || payload.email) {
+      if (payload.email) {
+        const dupUserId = await findOtherPatientUserIdByEmailInClinic(
+          connection,
+          payload.email,
+          cid,
+          patient.user_id
+        );
+        if (dupUserId) {
+          const err = new Error('A patient with this email already exists in this clinic');
+          err.statusCode = 409;
+          throw err;
+        }
+      }
+
       const updates = [];
       const values = [];
 
@@ -284,6 +332,13 @@ async function updatePatient(patientId, payload, actorId, scope) {
     await connection.commit();
   } catch (err) {
     await connection.rollback();
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      const e = new Error(
+        'Could not update patient: this email may already exist for this clinic, or conflicts with another account.'
+      );
+      e.statusCode = 409;
+      throw e;
+    }
     throw err;
   } finally {
     connection.release();

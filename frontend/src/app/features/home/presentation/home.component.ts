@@ -302,6 +302,22 @@ export class HomeComponent implements OnInit {
   appointmentDateFilter = '';
   appointmentMonthFilter = '';
   private appointmentSearchDebounce: any = null;
+  private appointmentColumnFilterDebounce: any = null;
+  appointmentColumnFilters = {
+    date: '',
+    time: '',
+    patient: '',
+    doctor: '',
+    status: '',
+    title: ''
+  };
+
+  /** Month grid (YYYY-MM) for Appointment → All appointments. */
+  allAppointmentsCalendarMonth = '';
+  allAppointmentsCalendarRows: AppointmentRow[] = [];
+  allAppointmentsCalendarLoading = false;
+  allAppointmentsCalendarTotal = 0;
+  selectedAllCalendarDate: string | null = null;
   orgSaving = false;
   orgLoading = false;
   orgSaveMessage = '';
@@ -390,12 +406,10 @@ export class HomeComponent implements OnInit {
     profileImage: string;
   } = this.getEmptyPatientForm();
   appointmentRows: AppointmentRow[] = [];
-  readonly weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   appointmentFormOpen = false;
   appointmentSubmitting = false;
   editingAppointmentId: number | null = null;
   appointmentFormError = '';
-  selectedAppointmentDate = '';
   appointmentForm: {
     patientId: number | null;
     doctorId: number | null;
@@ -970,6 +984,7 @@ export class HomeComponent implements OnInit {
       expanded: false,
       children: [
         { key: 'appointment-register', label: 'Calendar', iconText: 'C' },
+        { key: 'appointment-all', label: 'All appointments', iconText: 'AA' },
         { key: 'appointment-report', label: 'Report', iconText: 'RP' }
       ]
     },
@@ -1439,9 +1454,32 @@ export class HomeComponent implements OnInit {
       this.loadReportAppointmentsAll();
     }
     if (key === 'appointment-register') {
+      this.clearAppointmentFilters();
+      this.appointmentColumnFilters = {
+        date: '',
+        time: '',
+        patient: '',
+        doctor: '',
+        status: '',
+        title: ''
+      };
       this.loadActiveDoctorsForDropdowns();
       this.loadPatients(1, 100);
       this.loadAppointments(1);
+    }
+    if (key === 'appointment-all') {
+      this.appointmentColumnFilters = {
+        date: '',
+        time: '',
+        patient: '',
+        doctor: '',
+        status: '',
+        title: ''
+      };
+      this.ensureAllAppointmentsCalendarMonth();
+      this.loadActiveDoctorsForDropdowns();
+      this.loadPatients(1, 100);
+      this.loadAllAppointmentsCalendar();
     }
     if (key === 'dashboard') {
       this.loadActiveDoctorsForDropdowns();
@@ -3451,6 +3489,22 @@ export class HomeComponent implements OnInit {
     };
   }
 
+  private appendAppointmentColumnFilterParams(params: Record<string, string | number>): void {
+    const f = this.appointmentColumnFilters;
+    const colDate = String(f.date || '').trim();
+    const colTime = String(f.time || '').trim();
+    const colPatient = String(f.patient || '').trim();
+    const colDoctor = String(f.doctor || '').trim();
+    const colStatus = String(f.status || '').trim();
+    const colTitle = String(f.title || '').trim();
+    if (colDate) params['colDate'] = colDate;
+    if (colTime) params['colTime'] = colTime;
+    if (colPatient) params['colPatient'] = colPatient;
+    if (colDoctor) params['colDoctor'] = colDoctor;
+    if (colStatus) params['colStatus'] = colStatus;
+    if (colTitle) params['colTitle'] = colTitle;
+  }
+
   private getAppointmentListParams(): Record<string, string | number> {
     const params: Record<string, string | number> = {
       page: this.appointmentPagination.page,
@@ -3462,50 +3516,194 @@ export class HomeComponent implements OnInit {
     } else if (this.appointmentMonthFilter) {
       params['month'] = this.appointmentMonthFilter;
     }
+    this.appendAppointmentColumnFilterParams(params);
     return params;
   }
 
-  get currentCalendarMonthLabel(): string {
-    const base = this.getCalendarBaseDate();
-    return base.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  }
-
-  get appointmentDaysInMonth(): Array<{ date: string; day: number; items: AppointmentRow[] }> {
-    const base = this.getCalendarBaseDate();
-    const year = base.getFullYear();
-    const month = base.getMonth();
-    const days = new Date(year, month + 1, 0).getDate();
-    const rows: Array<{ date: string; day: number; items: AppointmentRow[] }> = [];
-
-    for (let d = 1; d <= days; d += 1) {
-      const date = new Date(year, month, d).toISOString().slice(0, 10);
-      rows.push({
-        date,
-        day: d,
-        items: this.appointmentRows.filter((item) => item.appointmentDate === date)
-      });
+  /** Query params for appointment list APIs when mutating from the All appointments calendar view. */
+  private getAppointmentApiQueryParams(): Record<string, string | number> {
+    if (this.active === 'appointment-all' && this.allAppointmentsCalendarMonth) {
+      return { page: 1, limit: 100, month: this.allAppointmentsCalendarMonth, q: '' };
     }
-    return rows;
+    return this.getAppointmentListParams();
   }
 
-  get selectedDateAppointments(): AppointmentRow[] {
-    if (!this.selectedAppointmentDate) return [];
-    return this.appointmentRows.filter((item) => item.appointmentDate === this.selectedAppointmentDate);
+  private refreshAppointmentViewsAfterSave(appointmentDate?: string): void {
+    if (this.active === 'appointment-all') {
+      this.loadAllAppointmentsCalendar();
+      if (appointmentDate) {
+        this.selectedAllCalendarDate = appointmentDate;
+      }
+      return;
+    }
+    this.loadAppointments(this.appointmentPagination.page);
   }
 
-  get selectedAppointmentDateLabel(): string {
-    if (!this.selectedAppointmentDate) return 'No date selected';
-    const d = new Date(this.selectedAppointmentDate);
-    if (Number.isNaN(d.getTime())) return this.selectedAppointmentDate;
+  private refreshAppointmentViewsAfterListChange(): void {
+    if (this.active === 'appointment-all') {
+      this.loadAllAppointmentsCalendar();
+      return;
+    }
+    this.loadAppointments(this.appointmentPagination.page);
+  }
+
+  formatYearMonth(d: Date): string {
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+
+  ensureAllAppointmentsCalendarMonth(): void {
+    if (!this.allAppointmentsCalendarMonth) {
+      this.allAppointmentsCalendarMonth = this.formatYearMonth(new Date());
+    }
+  }
+
+  loadAllAppointmentsCalendar(): void {
+    this.ensureAllAppointmentsCalendarMonth();
+    const month = this.allAppointmentsCalendarMonth;
+    this.allAppointmentsCalendarLoading = true;
+    const acc: AppointmentRow[] = [];
+    let capturedTotal = 0;
+    let totalPages = 1;
+
+    const mapRow = (a: AppointmentRow) => ({
+      ...a,
+      appointmentDate: String(a.appointmentDate).slice(0, 10),
+      startTime: String(a.startTime || '').slice(0, 5),
+      endTime: String(a.endTime || '').slice(0, 5)
+    });
+
+    const loadPage = (page: number) => {
+      this.http
+        .get<{ appointments: AppointmentRow[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>(
+          this.appointmentApiUrl,
+          { params: { page, limit: 100, month, q: '' } }
+        )
+        .subscribe({
+          next: (res) => {
+            const batch = (res?.appointments || []).map(mapRow);
+            acc.push(...batch);
+            const pg = res?.pagination;
+            if (page === 1) {
+              capturedTotal = pg?.total ?? acc.length;
+              totalPages = pg?.totalPages ?? 1;
+            }
+            if (page < totalPages) {
+              loadPage(page + 1);
+            } else {
+              acc.sort(
+                (a, b) =>
+                  a.appointmentDate.localeCompare(b.appointmentDate) || String(a.startTime).localeCompare(String(b.startTime))
+              );
+              this.allAppointmentsCalendarRows = acc;
+              this.allAppointmentsCalendarTotal = capturedTotal;
+              this.allAppointmentsCalendarLoading = false;
+              if (!this.selectedAllCalendarDate && acc.length > 0) {
+                this.selectedAllCalendarDate = acc[0].appointmentDate;
+              }
+            }
+          },
+          error: () => {
+            this.allAppointmentsCalendarLoading = false;
+            this.appointmentFormError = 'Unable to load appointments for calendar.';
+          }
+        });
+    };
+
+    loadPage(1);
+  }
+
+  shiftAllAppointmentsCalendarMonth(delta: number): void {
+    this.ensureAllAppointmentsCalendarMonth();
+    const [ys, ms] = this.allAppointmentsCalendarMonth.split('-').map(Number);
+    const d = new Date(ys, ms - 1 + delta, 1);
+    this.allAppointmentsCalendarMonth = this.formatYearMonth(d);
+    this.selectedAllCalendarDate = null;
+    this.loadAllAppointmentsCalendar();
+  }
+
+  goAllAppointmentsCalendarToday(): void {
+    this.allAppointmentsCalendarMonth = this.formatYearMonth(new Date());
+    this.selectedAllCalendarDate = this.todayYmd;
+    this.loadAllAppointmentsCalendar();
+  }
+
+  get todayYmd(): string {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  }
+
+  get allAppointmentsCalendarTitle(): string {
+    if (!this.allAppointmentsCalendarMonth) return '';
+    const [y, m] = this.allAppointmentsCalendarMonth.split('-').map(Number);
+    if (!y || !m) return this.allAppointmentsCalendarMonth;
+    return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+
+  get allCalendarWeekdayLabels(): string[] {
+    const base = new Date(2024, 6, 7);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      return d.toLocaleDateString(undefined, { weekday: 'short' });
+    });
+  }
+
+  get allCalendarWeeks(): Array<Array<{ date: string | null; inMonth: boolean; items: AppointmentRow[] }>> {
+    const ym = this.allAppointmentsCalendarMonth;
+    if (!ym) return [];
+    const parts = ym.split('-');
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    if (!y || !m) return [];
+
+    const itemsByDate = new Map<string, AppointmentRow[]>();
+    for (const row of this.allAppointmentsCalendarRows) {
+      const k = row.appointmentDate;
+      if (!k || !k.startsWith(ym)) continue;
+      const list = itemsByDate.get(k) || [];
+      list.push(row);
+      itemsByDate.set(k, list);
+    }
+
+    const first = new Date(y, m - 1, 1);
+    const lastDay = new Date(y, m, 0).getDate();
+    const startPad = first.getDay();
+
+    const cells: Array<{ date: string | null; inMonth: boolean; items: AppointmentRow[] }> = [];
+    for (let i = 0; i < startPad; i += 1) {
+      cells.push({ date: null, inMonth: false, items: [] });
+    }
+    for (let d = 1; d <= lastDay; d += 1) {
+      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      cells.push({ date: dateStr, inMonth: true, items: itemsByDate.get(dateStr) || [] });
+    }
+    while (cells.length % 7 !== 0) {
+      cells.push({ date: null, inMonth: false, items: [] });
+    }
+
+    const weeks: Array<Array<{ date: string | null; inMonth: boolean; items: AppointmentRow[] }>> = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7));
+    }
+    return weeks;
+  }
+
+  get selectedAllCalendarDayAppointments(): AppointmentRow[] {
+    if (!this.selectedAllCalendarDate) return [];
+    return this.allAppointmentsCalendarRows.filter((r) => r.appointmentDate === this.selectedAllCalendarDate);
+  }
+
+  get selectedAllCalendarDateLabel(): string {
+    if (!this.selectedAllCalendarDate) return 'Select a day';
+    const d = new Date(this.selectedAllCalendarDate + 'T12:00:00');
+    if (Number.isNaN(d.getTime())) return this.selectedAllCalendarDate;
     return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  private getCalendarBaseDate(): Date {
-    if (this.selectedAppointmentDate) {
-      const selected = new Date(this.selectedAppointmentDate);
-      if (!Number.isNaN(selected.getTime())) return selected;
-    }
-    return new Date();
+  selectAllCalendarDate(date: string | null): void {
+    this.selectedAllCalendarDate = date;
   }
 
   loadAppointments(page = this.appointmentPagination.page): void {
@@ -3519,6 +3717,7 @@ export class HomeComponent implements OnInit {
     } else if (this.appointmentMonthFilter) {
       params.month = this.appointmentMonthFilter;
     }
+    this.appendAppointmentColumnFilterParams(params);
 
     this.http
       .get<{ appointments: AppointmentRow[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>(this.appointmentApiUrl, {
@@ -3540,9 +3739,6 @@ export class HomeComponent implements OnInit {
           totalPages: pg?.totalPages || 1
         };
         this.appointmentPageInput = this.appointmentPagination.page;
-        if (!this.selectedAppointmentDate && this.appointmentRows.length > 0) {
-          this.selectedAppointmentDate = this.appointmentRows[0].appointmentDate;
-        }
       },
       error: () => {
         this.appointmentFormError = 'Unable to load appointments from backend.';
@@ -3740,13 +3936,12 @@ export class HomeComponent implements OnInit {
     return slice.map(([label, count]) => ({ label, count, pct: Math.round((count / max) * 100) }));
   }
 
-  selectAppointmentDate(date: string): void {
-    this.selectedAppointmentDate = date;
-  }
-
   openCreateAppointment(): void {
     this.editingAppointmentId = null;
     this.appointmentForm = this.getEmptyAppointmentForm();
+    if (this.active === 'appointment-all' && this.selectedAllCalendarDate) {
+      this.appointmentForm.appointmentDate = this.selectedAllCalendarDate;
+    }
     this.appointmentFormOpen = true;
     this.appointmentFormError = '';
   }
@@ -3792,12 +3987,20 @@ export class HomeComponent implements OnInit {
       return;
     }
 
-    if (!this.editingAppointmentId && !this.requireSingleClinicForCreate()) return;
+    if (!this.editingAppointmentId) {
+      if (!this.requireSingleClinicForCreate()) return;
+      const clinicHdr = this.authSession.getClinicIdHeaderValue();
+      if (clinicHdr == null || String(clinicHdr).trim() === '') {
+        this.appointmentFormError =
+          'Choose an active clinic in the header switcher. Appointments are saved with that clinic (sent as X-Clinic-Id).';
+        return;
+      }
+    }
 
     this.appointmentSubmitting = true;
     this.appointmentFormError = '';
 
-    const listParams = this.getAppointmentListParams();
+    const listParams = this.getAppointmentApiQueryParams();
 
     const request$ = this.editingAppointmentId
       ? this.http.put<{ appointments: AppointmentRow[] }>(`${this.appointmentApiUrl}/${this.editingAppointmentId}`, payload, {
@@ -3809,8 +4012,7 @@ export class HomeComponent implements OnInit {
 
     request$.subscribe({
       next: () => {
-        this.loadAppointments(this.appointmentPagination.page);
-        this.selectedAppointmentDate = payload.appointmentDate;
+        this.refreshAppointmentViewsAfterSave(payload.appointmentDate);
         this.closeAppointmentForm();
       },
       error: (err) => {
@@ -3837,12 +4039,12 @@ export class HomeComponent implements OnInit {
     this.appointmentFormError = '';
     this.http
       .put<{ appointments: AppointmentRow[] }>(`${this.appointmentApiUrl}/${item.id}`, payload, {
-        params: this.getAppointmentListParams()
+        params: this.getAppointmentApiQueryParams()
       })
       .subscribe({
         next: () => {
           this.appointmentStatusUpdatingId = null;
-          this.loadAppointments(this.appointmentPagination.page);
+          this.refreshAppointmentViewsAfterListChange();
         },
         error: (err) => {
           this.appointmentStatusUpdatingId = null;
@@ -3857,11 +4059,11 @@ export class HomeComponent implements OnInit {
 
     this.http
       .delete(`${this.appointmentApiUrl}/${row.id}`, {
-        params: this.getAppointmentListParams()
+        params: this.getAppointmentApiQueryParams()
       })
       .subscribe({
         next: () => {
-          this.loadAppointments(this.appointmentPagination.page);
+          this.refreshAppointmentViewsAfterListChange();
         },
         error: (err) => {
           this.appointmentFormError = err?.error?.message || 'Unable to delete appointment.';
@@ -3887,6 +4089,14 @@ export class HomeComponent implements OnInit {
     }, 300);
   }
 
+  onAppointmentColumnFilterChange(): void {
+    if (this.active !== 'appointment-register') return;
+    if (this.appointmentColumnFilterDebounce) clearTimeout(this.appointmentColumnFilterDebounce);
+    this.appointmentColumnFilterDebounce = setTimeout(() => {
+      this.loadAppointments(1);
+    }, 400);
+  }
+
   applyAppointmentFilters(): void {
     this.loadAppointments(1);
   }
@@ -3895,6 +4105,14 @@ export class HomeComponent implements OnInit {
     this.appointmentSearch = '';
     this.appointmentDateFilter = '';
     this.appointmentMonthFilter = '';
+    this.appointmentColumnFilters = {
+      date: '',
+      time: '',
+      patient: '',
+      doctor: '',
+      status: '',
+      title: ''
+    };
     this.loadAppointments(1);
   }
 

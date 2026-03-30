@@ -177,7 +177,29 @@ async function ensurePatientTables() {
   await ensureColumnExists('patient', 'emergency_contact_name', 'emergency_contact_name VARCHAR(150)');
   await ensureColumnExists('patient', 'emergency_contact_number', 'emergency_contact_number VARCHAR(20)');
   await ensureColumnExists('patient', 'medical_history', 'medical_history TEXT');
+  await ensureColumnExists('patient', 'clinic_id', 'clinic_id BIGINT NULL');
   await ensureColumnExists('attachment', 'patient_id', 'patient_id BIGINT NULL');
+
+  await backfillPatientUsersClinicIdFromPatientRow();
+}
+
+/** Align users.clinic_id with patient.clinic_id so per-clinic email rules apply to existing rows. */
+async function backfillPatientUsersClinicIdFromPatientRow() {
+  const pool = getPool();
+  try {
+    await pool.query(`
+      UPDATE users u
+      INNER JOIN patient p ON p.user_id = u.id
+      INNER JOIN user_role r ON r.id = u.role_id
+      SET u.clinic_id = p.clinic_id
+      WHERE r.role_name = 'Patient'
+        AND u.clinic_id IS NULL
+        AND p.clinic_id IS NOT NULL
+    `);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[db] backfillPatientUsersClinicIdFromPatientRow:', err?.message || err);
+  }
 }
 
 async function ensureAppointmentTables() {

@@ -33,6 +33,12 @@ async function listAppointments(pageInput, limitInput, filters = {}, scope) {
   const q = String(filters.search || '').trim();
   const date = String(filters.date || '').trim();
   const month = String(filters.month || '').trim();
+  const colPatient = String(filters.colPatient || '').trim();
+  const colDoctor = String(filters.colDoctor || '').trim();
+  const colTitle = String(filters.colTitle || '').trim();
+  const colStatus = String(filters.colStatus || '').trim();
+  const colDate = String(filters.colDate || '').trim();
+  const colTime = String(filters.colTime || '').trim();
   const { clause: clinicClause, params: clinicParams } = sqlClinicColumn('a.clinic_id', scope);
 
   const whereParts = [clinicClause];
@@ -48,6 +54,38 @@ async function listAppointments(pageInput, limitInput, filters = {}, scope) {
   } else if (month) {
     whereParts.push("DATE_FORMAT(a.appointment_date, '%Y-%m') = ?");
     whereParams.push(month);
+  }
+  if (colPatient) {
+    whereParts.push('up.username LIKE ?');
+    whereParams.push(`%${colPatient}%`);
+  }
+  if (colDoctor) {
+    whereParts.push('ud.username LIKE ?');
+    whereParams.push(`%${colDoctor}%`);
+  }
+  if (colTitle) {
+    whereParts.push('(a.title LIKE ? OR a.description LIKE ?)');
+    whereParams.push(`%${colTitle}%`, `%${colTitle}%`);
+  }
+  if (colStatus) {
+    const allowed = ['scheduled', 'completed', 'cancelled', 'no_show'];
+    if (allowed.includes(colStatus)) {
+      whereParts.push('a.status = ?');
+      whereParams.push(colStatus);
+    } else {
+      whereParts.push('a.status LIKE ?');
+      whereParams.push(`%${colStatus}%`);
+    }
+  }
+  if (colDate) {
+    whereParts.push("DATE_FORMAT(a.appointment_date, '%Y-%m-%d') LIKE ?");
+    whereParams.push(`%${colDate}%`);
+  }
+  if (colTime) {
+    whereParts.push(
+      "(CONCAT(TIME_FORMAT(a.start_time, '%H:%i'), ' ', TIME_FORMAT(a.end_time, '%H:%i')) LIKE ?)"
+    );
+    whereParams.push(`%${colTime}%`);
   }
   const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
@@ -123,6 +161,11 @@ async function hasDoctorTimeConflict(doctorId, appointmentDate, startTime, endTi
 async function createAppointment(payload, clinicId, scope) {
   const pool = getPool();
   const cid = Number(clinicId);
+  if (!Number.isFinite(cid) || cid < 1) {
+    const err = new Error('Clinic context required: appointment must be created under a specific clinic');
+    err.statusCode = 400;
+    throw err;
+  }
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();

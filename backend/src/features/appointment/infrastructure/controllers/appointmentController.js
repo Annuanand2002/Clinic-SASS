@@ -7,6 +7,21 @@ const {
 } = require('../repositories/mysqlAppointmentRepository');
 const { scopeFromReq, rejectIfClinicScopeAllCreate } = require('../../../../core/clinic/clinicScope');
 
+function appointmentListFiltersFromQuery(req) {
+  const q = req.query || {};
+  return {
+    search: q.q,
+    date: q.date,
+    month: q.month,
+    colPatient: q.colPatient,
+    colDoctor: q.colDoctor,
+    colTitle: q.colTitle,
+    colStatus: q.colStatus,
+    colDate: q.colDate,
+    colTime: q.colTime
+  };
+}
+
 async function getAppointments(req, res, next) {
   try {
     const page = req.query.page;
@@ -14,11 +29,7 @@ async function getAppointments(req, res, next) {
     const result = await listAppointments(
       page,
       limit,
-      {
-        search: req.query.q,
-        date: req.query.date,
-        month: req.query.month
-      },
+      appointmentListFiltersFromQuery(req),
       scopeFromReq(req)
     );
     return res.json({
@@ -53,11 +64,7 @@ async function createAppointmentHandler(req, res, next) {
     const result = await listAppointments(
       page,
       limit,
-      {
-        search: req.query.q,
-        date: req.query.date,
-        month: req.query.month
-      },
+      appointmentListFiltersFromQuery(req),
       scopeFromReq(req)
     );
     return res.status(201).json({
@@ -96,11 +103,7 @@ async function updateAppointmentHandler(req, res, next) {
     const result = await listAppointments(
       page,
       limit,
-      {
-        search: req.query.q,
-        date: req.query.date,
-        month: req.query.month
-      },
+      appointmentListFiltersFromQuery(req),
       scopeFromReq(req)
     );
     return res.json({
@@ -125,11 +128,7 @@ async function deleteAppointmentHandler(req, res, next) {
     const result = await listAppointments(
       page,
       limit,
-      {
-        search: req.query.q,
-        date: req.query.date,
-        month: req.query.month
-      },
+      appointmentListFiltersFromQuery(req),
       scopeFromReq(req)
     );
     return res.json({
