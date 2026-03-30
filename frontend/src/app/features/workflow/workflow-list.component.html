@@ -64,26 +64,29 @@
   </div>
 </div>
 
-<div class="doctor-modal-backdrop" *ngIf="createOpen" (click)="closeCreate()"></div>
-<div class="doctor-modal" *ngIf="createOpen" (click)="$event.stopPropagation()">
-  <h3>New workflow</h3>
-  <div class="form-group">
-    <label>Name</label>
-    <input [(ngModel)]="createName" maxlength="100" placeholder="Display name" />
+<ng-container *ngIf="createOpen">
+  <div class="doctor-modal-backdrop" (click)="closeCreate()">
+    <div class="doctor-modal" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="wf-new-title">
+      <h3 id="wf-new-title">New workflow</h3>
+      <div class="form-group">
+        <label>Name</label>
+        <input [(ngModel)]="createName" maxlength="100" placeholder="Display name" />
+      </div>
+      <div class="form-group">
+        <label>Entity type</label>
+        <select [(ngModel)]="createEntityType">
+          <option value="complaint">complaint</option>
+          <option value="appointment">appointment</option>
+        </select>
+      </div>
+      <div class="doctor-modal-actions">
+        <button type="button" class="table-footer-btn" (click)="closeCreate()">Cancel</button>
+        <button type="button" class="btn-primary" [disabled]="createSubmitting" (click)="submitCreate()">
+          {{ createSubmitting ? 'Creating…' : 'Create' }}
+        </button>
+      </div>
+    </div>
   </div>
-  <div class="form-group">
-    <label>Entity type</label>
-    <select [(ngModel)]="createEntityType">
-      <option value="complaint">complaint</option>
-      <option value="appointment">appointment</option>
-    </select>
-  </div>
-  <div class="doctor-modal-actions">
-    <button type="button" class="table-footer-btn" (click)="closeCreate()">Cancel</button>
-    <button type="button" class="btn-primary" [disabled]="createSubmitting" (click)="submitCreate()">
-      {{ createSubmitting ? 'Creating…' : 'Create' }}
-    </button>
-  </div>
-</div>
+</ng-container>
 
 <app-workflow-help-modal [(open)]="helpOpen"></app-workflow-help-modal>

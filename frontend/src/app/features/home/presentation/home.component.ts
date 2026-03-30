@@ -233,7 +233,9 @@ interface ComplaintDetailDto {
     trigger('cardStagger', [
       transition(':enter', [
         style({ opacity: 0, transform: 'translateY(10px)' }),
-        animate('420ms cubic-bezier(.2,.9,.2,1)', style({ opacity: 1, transform: 'translateY(0)' }))
+        // End with transform:none so ancestors do not establish a fixed-position containing block
+        // (translateY(0) still counts as transform and breaks fixed overlays/modals inside the section).
+        animate('420ms cubic-bezier(.2,.9,.2,1)', style({ opacity: 1, transform: 'none' }))
       ])
     ])
   ]

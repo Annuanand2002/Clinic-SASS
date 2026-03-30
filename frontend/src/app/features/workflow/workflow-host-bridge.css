@@ -597,11 +597,16 @@ app-workflow-help-modal .doctor-modal-backdrop {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  padding: 16px;
+  box-sizing: border-box;
+  /* Above in-app chrome (e.g. topbar/dropdowns); below global attachment preview if both exist */
+  z-index: 10000;
 }
 
 app-workflow-list .doctor-modal,
 app-workflow-help-modal .doctor-modal {
+  position: relative;
+  flex-shrink: 0;
   width: 92vw;
   max-width: 420px;
   border-radius: 20px;

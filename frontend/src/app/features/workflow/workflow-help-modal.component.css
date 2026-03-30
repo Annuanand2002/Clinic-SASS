@@ -1,5 +1,9 @@
 /* Presentation lives in workflow-host-bridge.css (doctor-modal). Local tweaks only. */
 
+:host {
+  display: block;
+}
+
 .wf-help-body {
   font-size: 14px;
   line-height: 1.55;
