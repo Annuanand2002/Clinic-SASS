@@ -1,0 +1,99 @@
+<section class="inventory-page">
+  <header class="inventory-hero inventory-hero--stock">
+    <div class="inventory-hero-text">
+      <p class="inventory-hero-kicker">Stock &amp; batches</p>
+      <h2>Inventory — Stock (batches)</h2>
+      <p class="muted">Batch-level remaining quantity, ordered by item. Row highlights reflect expiry risk.</p>
+    </div>
+    <div class="inventory-hero-accent" aria-hidden="true"></div>
+  </header>
+
+  <article class="glass-card inventory-section inventory-card--inbound" *ngIf="canEdit">
+    <h3 class="inventory-section-title">Add stock</h3>
+    <div class="settings-grid">
+      <div class="form-group full-width">
+        <label>Item</label>
+        <app-item-dropdown
+          [items]="itemOptions"
+          [(value)]="purchaseForm.itemId"
+          placeholder="Select item"
+        ></app-item-dropdown>
+      </div>
+      <div class="form-group">
+        <label>Quantity</label>
+        <input type="number" min="1" step="1" [(ngModel)]="purchaseForm.quantity" />
+      </div>
+      <div class="form-group">
+        <label>Batch number</label>
+        <input type="text" [(ngModel)]="purchaseForm.batchNumber" placeholder="Lot / batch" />
+      </div>
+      <div class="form-group">
+        <label>Purchase price</label>
+        <input type="number" min="0" step="0.01" [(ngModel)]="purchaseForm.purchasePrice" />
+      </div>
+      <div class="form-group">
+        <label>Expiry date</label>
+        <input type="date" [(ngModel)]="purchaseForm.expiryDate" />
+      </div>
+      <div class="form-group">
+        <label>Purchase date</label>
+        <input type="date" [(ngModel)]="purchaseForm.purchaseDate" />
+      </div>
+      <div class="form-group full-width">
+        <label>Supplier</label>
+        <input type="text" [(ngModel)]="purchaseForm.supplierName" />
+      </div>
+    </div>
+    <p *ngIf="purchaseError" class="save-error">{{ purchaseError }}</p>
+    <button class="btn-primary" type="button" [disabled]="purchaseSubmitting" (click)="submitPurchase()">
+      {{ purchaseSubmitting ? 'Saving…' : 'Add stock' }}
+    </button>
+  </article>
+
+  <article class="glass-card inventory-section inventory-card--batches">
+    <h3 class="inventory-section-title">Batches</h3>
+    <div class="inventory-toolbar">
+      <label class="filter-label">Filter by item</label>
+      <select class="inventory-select" [(ngModel)]="filterItemId" (change)="onFilterChange()">
+        <option [ngValue]="null">All items</option>
+        <option *ngFor="let o of itemOptions" [ngValue]="o.id">{{ o.name }}</option>
+      </select>
+      <button type="button" class="btn-icon ghost" (click)="loadBatches()">Refresh</button>
+    </div>
+
+    <p *ngIf="loading" class="muted">Loading…</p>
+    <div class="table-wrap" *ngIf="!loading">
+      <table class="register-table inventory-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Batch</th>
+            <th>Remaining</th>
+            <th>Purchase</th>
+            <th>Expiry</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let row of batches"
+            [class.inventory-row-expired]="statusFor(row) === 'expired'"
+            [class.inventory-row-expiring]="statusFor(row) === 'expiring'"
+          >
+            <td>{{ row.itemName }}</td>
+            <td>{{ row.batchNumber || '—' }}</td>
+            <td>{{ row.remainingQuantity }}</td>
+            <td>{{ row.purchaseDate || '—' }}</td>
+            <td>{{ row.expiryDate || '—' }}</td>
+            <td>
+              <app-stock-status-badge [kind]="statusFor(row)"></app-stock-status-badge>
+            </td>
+          </tr>
+          <tr *ngIf="batches.length === 0">
+            <td colspan="6" class="muted" style="text-align: center; padding: 18px">No batches with remaining quantity.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>

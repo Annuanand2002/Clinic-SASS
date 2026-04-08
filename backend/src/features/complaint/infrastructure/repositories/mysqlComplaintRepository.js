@@ -2,7 +2,6 @@
 
 const { getPool } = require('../../../../core/db/pool');
 const { sqlClinicColumn } = require('../../../../core/clinic/clinicScope');
-const { initializeEntityWorkflowScoped } = require('../../../workflow/application/workflowEngine');
 
 function mapClinic(row) {
   if (!row) return null;
@@ -154,13 +153,6 @@ async function createComplaint(payload, clinicId, createdByUserId, scope) {
       `INSERT INTO complaint_updates (complaint_id, status, message, updated_by)
        VALUES (?, 'open', ?, ?)`,
       [id, payload.initialMessage, Number(createdByUserId)]
-    );
-    await initializeEntityWorkflowScoped(
-      connection,
-      'complaint',
-      id,
-      scope,
-      Number(createdByUserId)
     );
     await connection.commit();
     return id;

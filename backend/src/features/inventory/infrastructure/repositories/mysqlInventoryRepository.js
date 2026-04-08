@@ -1,5 +1,6 @@
 const { getPool } = require('../../../../core/db/pool');
 const { sqlClinicColumn } = require('../../../../core/clinic/clinicScope');
+const inventoryService = require('../../application/inventoryService');
 
 function mapItemRow(row) {
   return {
@@ -17,10 +18,16 @@ function mapItemRow(row) {
 }
 
 function mapStockRow(row) {
+  const q = Number(row.quantity);
+  const rem =
+    row.remaining_quantity != null && row.remaining_quantity !== ''
+      ? Number(row.remaining_quantity)
+      : q;
   return {
     id: row.id,
     itemId: row.item_id,
-    quantity: Number(row.quantity),
+    quantity: q,
+    remainingQuantity: rem,
     batchNumber: row.batch_number || '',
     expiryDate: row.expiry_date ? String(row.expiry_date).slice(0, 10) : null,
     purchaseDate: row.purchase_date ? String(row.purchase_date).slice(0, 10) : null,
@@ -34,6 +41,7 @@ function mapMovementRow(row) {
   return {
     id: row.id,
     itemId: row.item_id,
+    stockId: row.stock_id != null ? Number(row.stock_id) : null,
     itemName: row.item_name || '',
     type: row.type,
     quantity: Number(row.quantity),
@@ -75,9 +83,10 @@ async function listItems(pageInput, limitInput, searchInput, includeTotals = tru
   const [countRows] = await pool.query(`SELECT COUNT(*) AS total FROM inventory_item i ${whereSql}`, whereParams);
   const total = Number(countRows?.[0]?.total || 0);
 
+  const remSum = inventoryService.sqlAvailableRemainingExpr('s');
   const totalSelect = includeTotals
     ? `, COALESCE((
-         SELECT SUM(s.quantity) FROM inventory_stock s WHERE s.item_id = i.id AND ${sClinic}
+         SELECT SUM(${remSum}) FROM inventory_stock s WHERE s.item_id = i.id AND ${sClinic}
        ), 0) AS total_quantity`
     : '';
 
@@ -178,166 +187,16 @@ async function deleteItem(itemId, scope) {
   await pool.query(`DELETE FROM inventory_item WHERE id = ? AND ${clause}`, [itemId, ...params]);
 }
 
-/**
- * Purchase: insert batch + IN movement in one transaction.
- */
 async function addPurchaseStock(payload, scope) {
-  const pool = getPool();
-  const itemId = Number(payload.itemId);
-  const quantity = Number(payload.quantity);
-  if (!itemId || quantity <= 0 || !Number.isInteger(quantity)) {
-    const err = new Error('Valid itemId and positive integer quantity are required');
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const { clause, params: qParams } = sqlClinicColumn('clinic_id', scope);
-  const [itemRows] = await pool.query(
-    `SELECT id, is_active, clinic_id FROM inventory_item WHERE id = ? AND ${clause} LIMIT 1`,
-    [itemId, ...qParams]
-  );
-  const ir = itemRows && itemRows[0];
-  const item = ir ? { id: ir.id, isActive: !!ir.is_active } : null;
-  const cid = ir && ir.clinic_id != null ? Number(ir.clinic_id) : NaN;
-  if (!item || !item.isActive || !Number.isFinite(cid)) {
-    const err = new Error('Item not found or inactive');
-    err.statusCode = 404;
-    throw err;
-  }
-
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    const [ins] = await connection.query(
-      `INSERT INTO inventory_stock (
-        item_id, quantity, batch_number, expiry_date, purchase_date, purchase_price, supplier_name, clinic_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        itemId,
-        quantity,
-        payload.batchNumber || null,
-        payload.expiryDate || null,
-        payload.purchaseDate || null,
-        payload.purchasePrice != null && payload.purchasePrice !== '' ? Number(payload.purchasePrice) : null,
-        payload.supplierName || null,
-        cid
-      ]
-    );
-
-    await connection.query(
-      `INSERT INTO stock_movement (item_id, type, quantity, reference_type, reference_id, notes, clinic_id)
-       VALUES (?, 'IN', ?, ?, ?, ?, ?)`,
-      [
-        itemId,
-        quantity,
-        payload.referenceType || 'purchase',
-        payload.referenceId != null ? Number(payload.referenceId) : null,
-        payload.notes || null,
-        cid
-      ]
-    );
-
-    await connection.commit();
-    return { stockId: ins.insertId, itemId, quantity };
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  } finally {
-    connection.release();
-  }
+  return inventoryService.addPurchaseFromPayload(payload, scope);
 }
 
-/**
- * FIFO by COALESCE(purchase_date, DATE(created_at)), then created_at, then id.
- */
 async function consumeStockFifo(payload, scope) {
-  const pool = getPool();
-  const itemId = Number(payload.itemId);
-  let need = Number(payload.quantity);
-  if (!itemId || need <= 0 || !Number.isInteger(need)) {
-    const err = new Error('Valid itemId and positive integer quantity are required');
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const { clause, params: qParams } = sqlClinicColumn('clinic_id', scope);
-  const [itemRows] = await pool.query(
-    `SELECT id, is_active, clinic_id FROM inventory_item WHERE id = ? AND ${clause} LIMIT 1`,
-    [itemId, ...qParams]
-  );
-  const ir = itemRows && itemRows[0];
-  const item = ir ? { id: ir.id, isActive: !!ir.is_active } : null;
-  const cid = ir && ir.clinic_id != null ? Number(ir.clinic_id) : NaN;
-  if (!item || !item.isActive || !Number.isFinite(cid)) {
-    const err = new Error('Item not found or inactive');
-    err.statusCode = 404;
-    throw err;
-  }
-
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    const [batches] = await connection.query(
-      `SELECT id, quantity
-       FROM inventory_stock
-       WHERE item_id = ? AND clinic_id = ? AND quantity > 0
-       ORDER BY COALESCE(purchase_date, DATE(created_at)) ASC, created_at ASC, id ASC
-       FOR UPDATE`,
-      [itemId, cid]
-    );
-
-    let available = (batches || []).reduce((s, b) => s + Number(b.quantity), 0);
-    if (available < need) {
-      const err = new Error(`Insufficient stock: need ${need}, available ${available}`);
-      err.code = 'INSUFFICIENT_STOCK';
-      err.statusCode = 400;
-      err.available = available;
-      throw err;
-    }
-
-    let remaining = need;
-    for (const batch of batches || []) {
-      if (remaining <= 0) break;
-      const q = Number(batch.quantity);
-      const take = Math.min(q, remaining);
-      const newQ = q - take;
-      await connection.query('UPDATE inventory_stock SET quantity = ? WHERE id = ?', [newQ, batch.id]);
-      remaining -= take;
-    }
-
-    await connection.query(
-      `INSERT INTO stock_movement (item_id, type, quantity, reference_type, reference_id, notes, clinic_id)
-       VALUES (?, 'OUT', ?, ?, ?, ?, ?)`,
-      [
-        itemId,
-        need,
-        payload.referenceType || 'manual',
-        payload.referenceId != null ? Number(payload.referenceId) : null,
-        payload.notes || null,
-        cid
-      ]
-    );
-
-    await connection.commit();
-    return { itemId, quantity: need };
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  } finally {
-    connection.release();
-  }
+  return inventoryService.deductFromPayload(payload, scope);
 }
 
 async function getTotalStockByItem(itemId, scope) {
-  const pool = getPool();
-  const { clause, params } = sqlClinicColumn('clinic_id', scope);
-  const [rows] = await pool.query(
-    `SELECT COALESCE(SUM(quantity), 0) AS total FROM inventory_stock WHERE item_id = ? AND ${clause}`,
-    [itemId, ...params]
-  );
-  return Number(rows?.[0]?.total || 0);
+  return inventoryService.getAvailableStock(itemId, scope);
 }
 
 /**
@@ -346,8 +205,9 @@ async function getTotalStockByItem(itemId, scope) {
 async function getInventorySummary(options = {}, scope) {
   const pool = getPool();
   const expiringDays = Math.max(1, Number(options.expiringWithinDays) || 30);
-  const { clause: subClinic, params: subParams } = sqlClinicColumn('clinic_id', scope);
+  const { clause: subClinic, params: subParams } = sqlClinicColumn('s.clinic_id', scope);
   const { clause: iClinic, params: iParams } = sqlClinicColumn('i.clinic_id', scope);
+  const remSum = inventoryService.sqlAvailableRemainingExpr('s');
 
   const [items] = await pool.query(
     `
@@ -360,10 +220,10 @@ async function getInventorySummary(options = {}, scope) {
       COALESCE(t.total_qty, 0) AS total_quantity
     FROM inventory_item i
     LEFT JOIN (
-      SELECT item_id, SUM(quantity) AS total_qty
-      FROM inventory_stock
+      SELECT s.item_id, SUM(${remSum}) AS total_qty
+      FROM inventory_stock s
       WHERE ${subClinic}
-      GROUP BY item_id
+      GROUP BY s.item_id
     ) t ON t.item_id = i.id
     WHERE i.is_active = 1 AND ${iClinic}
     ORDER BY i.name
@@ -401,7 +261,7 @@ async function getInventorySummary(options = {}, scope) {
      FROM inventory_stock s
      INNER JOIN inventory_item i ON i.id = s.item_id
      WHERE ${sEx} AND ${iEx}
-       AND s.quantity > 0
+       AND COALESCE(s.remaining_quantity, s.quantity) > 0
        AND s.expiry_date IS NOT NULL
        AND s.expiry_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
        AND s.expiry_date >= CURDATE()
@@ -437,6 +297,70 @@ async function listStockBatches(itemId, scope) {
     [itemId, ...sP, ...iP]
   );
   return (rows || []).map(mapStockRow);
+}
+
+/**
+ * @param {{ mode?: string, itemId?: string|number, fromDate?: string, toDate?: string }} query
+ */
+async function listBatchesReport(query, scope) {
+  const pool = getPool();
+  const mode = String(query.mode || 'all').toLowerCase();
+  const itemIdFilter = query.itemId != null && query.itemId !== '' ? Number(query.itemId) : null;
+  const fromExp = query.fromDate ? String(query.fromDate).slice(0, 10) : '';
+  const toExp = query.toDate ? String(query.toDate).slice(0, 10) : '';
+
+  const { clause: sC, params: sP } = sqlClinicColumn('s.clinic_id', scope);
+  const { clause: iC, params: iP } = sqlClinicColumn('i.clinic_id', scope);
+  const rem = inventoryService.sqlRemainingExpr('s');
+
+  const parts = [sC, iC, `${rem} > 0`];
+  const params = [...sP, ...iP];
+
+  if (itemIdFilter) {
+    parts.push('s.item_id = ?');
+    params.push(itemIdFilter);
+  }
+
+  if (mode === 'expired') {
+    parts.push('s.expiry_date IS NOT NULL');
+    parts.push('s.expiry_date < CURDATE()');
+  } else if (mode === 'expiring') {
+    parts.push('s.expiry_date IS NOT NULL');
+    parts.push('s.expiry_date >= CURDATE()');
+    parts.push('s.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)');
+  }
+
+  if (fromExp) {
+    parts.push('(s.expiry_date IS NULL OR s.expiry_date >= ?)');
+    params.push(fromExp);
+  }
+  if (toExp) {
+    parts.push('(s.expiry_date IS NULL OR s.expiry_date <= ?)');
+    params.push(toExp);
+  }
+
+  const whereSql = `WHERE ${parts.join(' AND ')}`;
+
+  const [rows] = await pool.query(
+    `SELECT s.id AS stockId, s.item_id AS itemId, i.name AS itemName, s.batch_number AS batchNumber,
+            ${rem} AS remainingQuantity,
+            s.purchase_date AS purchaseDate, s.expiry_date AS expiryDate
+     FROM inventory_stock s
+     INNER JOIN inventory_item i ON i.id = s.item_id
+     ${whereSql}
+     ORDER BY i.name ASC, s.expiry_date IS NULL, s.expiry_date ASC, s.id ASC`,
+    params
+  );
+
+  return (rows || []).map((r) => ({
+    stockId: r.stockId,
+    itemId: r.itemId,
+    itemName: r.itemName || '',
+    batchNumber: r.batchNumber || '',
+    remainingQuantity: Number(r.remainingQuantity || 0),
+    purchaseDate: r.purchaseDate ? String(r.purchaseDate).slice(0, 10) : null,
+    expiryDate: r.expiryDate ? String(r.expiryDate).slice(0, 10) : null
+  }));
 }
 
 async function listMovements(pageInput, limitInput, filters = {}, scope) {
@@ -496,7 +420,9 @@ module.exports = {
   addPurchaseStock,
   consumeStockFifo,
   getTotalStockByItem,
+  getAvailableStock: (itemId, scope) => inventoryService.getAvailableStock(itemId, scope),
   getInventorySummary,
   listStockBatches,
+  listBatchesReport,
   listMovements
 };

@@ -753,414 +753,11 @@
       </div>
     </div>
 
-    <section class="inventory-page" *ngIf="active === 'inventory-register'" @cardStagger>
-      <div class="inventory-page-head">
-        <div class="inventory-page-head-row">
-          <h2>Inventory — Register</h2>
-          <button
-            type="button"
-            class="inventory-help-btn"
-            (click)="openInventoryHelp()"
-            aria-label="How inventory works"
-            title="How inventory works"
-          >
-            <span class="inventory-help-ic" aria-hidden="true">?</span>
-          </button>
-        </div>
-        <p class="muted">Manage items, receive stock, issue stock (FIFO), view balances and movement history.</p>
-      </div>
-
-      <article class="glass-card inventory-section">
-        <h3 class="inventory-section-title">Inventory items</h3>
-        <div class="inventory-toolbar">
-          <input
-            type="text"
-            class="inventory-search"
-            [(ngModel)]="inventoryRegisterSearch"
-            (input)="onInventoryRegisterSearchInput()"
-            placeholder="Search by name..."
-          />
-          <select class="inventory-select" [(ngModel)]="inventoryCategoryFilter" (change)="applyInventoryCategoryFilter()">
-            <option *ngFor="let c of inventoryCategoryOptions" [ngValue]="c.value">{{ c.label }}</option>
-          </select>
-          <button class="btn-primary" type="button" (click)="openCreateInventoryItem()">+ Add item</button>
-        </div>
-        <div class="table-wrap">
-          <table class="register-table inventory-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Unit</th>
-                <th>Min stock</th>
-                <th>On hand</th>
-                <th>Active</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of inventoryRegisterItems; let i = index">
-                <td>{{ (inventoryRegisterPagination.page - 1) * inventoryRegisterPagination.limit + i + 1 }}</td>
-                <td>{{ row.name }}</td>
-                <td>{{ row.category }}</td>
-                <td>{{ row.unit || '—' }}</td>
-                <td>{{ row.minStock }}</td>
-                <td>{{ row.totalQuantity != null ? row.totalQuantity : '—' }}</td>
-                <td>{{ row.isActive ? 'Yes' : 'No' }}</td>
-                <td>
-                  <div class="row-actions">
-                    <button class="btn-icon ghost" type="button" title="Edit" (click)="openEditInventoryItem(row)">✎</button>
-                    <button class="btn-icon ghost" type="button" title="Delete" (click)="deleteInventoryItem(row)">🗑</button>
-                  </div>
-                </td>
-              </tr>
-              <tr *ngIf="inventoryRegisterItems.length === 0">
-                <td colspan="8" class="muted" style="text-align: center; padding: 18px">No items yet. Add an item to begin.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <footer class="table-footer" *ngIf="inventoryRegisterPagination.totalPages > 0">
-          <div class="table-footer-inner">
-            <span class="table-footer-meta"
-              >Page {{ inventoryRegisterPagination.page }} of {{ inventoryRegisterPagination.totalPages }}</span
-            >
-            <div class="table-footer-controls">
-              <button
-                class="table-footer-btn"
-                type="button"
-                (click)="changeInventoryRegisterPage('prev')"
-                [disabled]="inventoryRegisterPagination.page <= 1"
-              >
-                Previous
-              </button>
-              <button
-                class="table-footer-btn"
-                type="button"
-                (click)="changeInventoryRegisterPage('next')"
-                [disabled]="inventoryRegisterPagination.page >= inventoryRegisterPagination.totalPages"
-              >
-                Next
-              </button>
-              <input
-                type="number"
-                min="1"
-                [max]="inventoryRegisterPagination.totalPages"
-                [(ngModel)]="inventoryRegisterPageInput"
-                class="table-footer-input"
-              />
-              <button class="table-footer-btn primary" type="button" (click)="jumpInventoryRegisterPage()">Go</button>
-            </div>
-          </div>
-        </footer>
-      </article>
-
-      <div class="inventory-two-col">
-        <article class="glass-card inventory-section">
-          <h3 class="inventory-section-title">Add stock (purchase)</h3>
-          <div class="settings-grid">
-            <div class="form-group">
-              <label>Item</label>
-              <select [(ngModel)]="purchaseForm.itemId">
-                <option [ngValue]="null">Select item</option>
-                <option *ngFor="let opt of inventoryItemSelectOptions" [ngValue]="opt.id">{{ opt.name }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Quantity</label>
-              <input type="number" min="1" step="1" [(ngModel)]="purchaseForm.quantity" />
-            </div>
-            <div class="form-group">
-              <label>Purchase date</label>
-              <input type="date" [(ngModel)]="purchaseForm.purchaseDate" />
-            </div>
-            <div class="form-group">
-              <label>Supplier</label>
-              <input type="text" [(ngModel)]="purchaseForm.supplierName" placeholder="Supplier name" />
-            </div>
-            <div class="form-group">
-              <label>Price</label>
-              <input type="number" min="0" step="0.01" [(ngModel)]="purchaseForm.purchasePrice" placeholder="0.00" />
-            </div>
-            <div class="form-group">
-              <label>Expiry date</label>
-              <input type="date" [(ngModel)]="purchaseForm.expiryDate" />
-            </div>
-            <div class="form-group full-width">
-              <label>Batch number (optional)</label>
-              <input type="text" [(ngModel)]="purchaseForm.batchNumber" placeholder="Lot / batch" />
-            </div>
-          </div>
-          <div *ngIf="purchaseError" class="save-error">{{ purchaseError }}</div>
-          <button class="btn-primary" type="button" [disabled]="purchaseSubmitting" (click)="submitPurchase()">
-            {{ purchaseSubmitting ? 'Saving…' : 'Add stock' }}
-          </button>
-        </article>
-
-        <article class="glass-card inventory-section">
-          <h3 class="inventory-section-title">Use stock</h3>
-          <div class="settings-grid">
-            <div class="form-group">
-              <label>Item</label>
-              <select [(ngModel)]="useForm.itemId" (ngModelChange)="onUseItemSelectChange()">
-                <option [ngValue]="null">Select item</option>
-                <option *ngFor="let opt of inventoryItemSelectOptions" [ngValue]="opt.id">{{ opt.name }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Quantity</label>
-              <input type="number" min="1" step="1" [(ngModel)]="useForm.quantity" />
-            </div>
-          </div>
-          <p class="inventory-available" *ngIf="useForm.itemId">
-            <strong>Available:</strong> {{ useAvailableQty }}
-            <span *ngIf="useStockSubmitDisabled && useForm.quantity >= 1" class="inventory-warn"> — insufficient stock</span>
-          </p>
-          <div *ngIf="useError" class="save-error">{{ useError }}</div>
-          <button
-            class="btn-primary"
-            type="button"
-            [disabled]="useSubmitting || useStockSubmitDisabled"
-            (click)="submitUseStock()"
-          >
-            {{ useSubmitting ? 'Processing…' : 'Use stock' }}
-          </button>
-        </article>
-      </div>
-
-      <article class="glass-card inventory-section">
-        <h3 class="inventory-section-title">Stock view</h3>
-        <p class="muted small">Total quantity per item. Expand a row for batch details (expiry, quantity).</p>
-        <div class="table-wrap">
-          <table class="register-table inventory-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Category</th>
-                <th>Total qty</th>
-                <th>Min</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <ng-container *ngFor="let s of stockViewSummary">
-                <tr [class.row-alert-low]="s.isLowStock">
-                  <td>{{ s.name }}</td>
-                  <td>{{ s.category }}</td>
-                  <td>{{ s.totalQuantity }}</td>
-                  <td>{{ s.minStock }}</td>
-                  <td>
-                    <button class="btn-icon ghost" type="button" (click)="toggleStockBatches(s.itemId)">
-                      {{ stockViewExpandedId === s.itemId ? 'Hide batches' : 'Batches' }}
-                    </button>
-                  </td>
-                </tr>
-                <tr *ngIf="stockViewExpandedId === s.itemId" class="batch-detail-row">
-                  <td colspan="5">
-                    <table class="batch-nested">
-                      <thead>
-                        <tr>
-                          <th>Batch</th>
-                          <th>Qty</th>
-                          <th>Expiry</th>
-                          <th>Purchase</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr *ngIf="stockViewBatches[s.itemId] === undefined">
-                          <td colspan="4" class="muted">Loading…</td>
-                        </tr>
-                        <tr *ngFor="let b of stockViewBatches[s.itemId] || []">
-                          <td>{{ b.batchNumber || '—' }}</td>
-                          <td>{{ b.quantity }}</td>
-                          <td>{{ b.expiryDate || '—' }}</td>
-                          <td>{{ b.purchaseDate || '—' }}</td>
-                        </tr>
-                        <tr *ngIf="stockViewBatches[s.itemId] !== undefined && (stockViewBatches[s.itemId] || []).length === 0">
-                          <td colspan="4" class="muted">No batch rows (qty may be zero).</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </ng-container>
-              <tr *ngIf="stockViewSummary.length === 0">
-                <td colspan="5" class="muted" style="text-align: center; padding: 18px">No stock data.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </article>
-
-      <article class="glass-card inventory-section">
-        <h3 class="inventory-section-title">Stock movement history</h3>
-        <div class="inventory-toolbar">
-          <select class="inventory-select" [(ngModel)]="movementFilters.itemId">
-            <option value="">All items</option>
-            <option *ngFor="let opt of inventoryItemSelectOptions" [value]="opt.id">{{ opt.name }}</option>
-          </select>
-          <input type="date" [(ngModel)]="movementFilters.fromDate" />
-          <input type="date" [(ngModel)]="movementFilters.toDate" />
-          <button class="btn-primary" type="button" (click)="applyMovementFilters()">Apply filters</button>
-        </div>
-        <div class="table-wrap">
-          <table class="register-table inventory-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Type</th>
-                <th>Qty</th>
-                <th>Date</th>
-                <th>Reference</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let m of movementRows" [class.movement-in]="m.type === 'IN'" [class.movement-out]="m.type === 'OUT'">
-                <td>{{ m.itemName }}</td>
-                <td>
-                  <span class="inv-type-pill" [class.in]="m.type === 'IN'" [class.out]="m.type === 'OUT'">{{ m.type }}</span>
-                </td>
-                <td>{{ m.quantity }}</td>
-                <td>{{ formatMovementDate(m.createdAt) }}</td>
-                <td>{{ formatMovementReference(m) }}</td>
-              </tr>
-              <tr *ngIf="movementRows.length === 0">
-                <td colspan="5" class="muted" style="text-align: center; padding: 18px">No movements found.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <footer class="table-footer" *ngIf="movementPagination.totalPages > 0">
-          <div class="table-footer-inner">
-            <span class="table-footer-meta">Page {{ movementPagination.page }} of {{ movementPagination.totalPages }}</span>
-            <div class="table-footer-controls">
-              <button class="table-footer-btn" type="button" (click)="changeMovementPage('prev')" [disabled]="movementPagination.page <= 1">
-                Previous
-              </button>
-              <button
-                class="table-footer-btn"
-                type="button"
-                (click)="changeMovementPage('next')"
-                [disabled]="movementPagination.page >= movementPagination.totalPages"
-              >
-                Next
-              </button>
-              <input
-                type="number"
-                min="1"
-                [max]="movementPagination.totalPages"
-                [(ngModel)]="movementPageInput"
-                class="table-footer-input"
-              />
-              <button class="table-footer-btn primary" type="button" (click)="jumpMovementPage()">Go</button>
-            </div>
-          </div>
-        </footer>
-      </article>
-
-      <div class="doctor-modal-backdrop" *ngIf="inventoryItemFormOpen">
-        <div class="doctor-modal">
-          <h3>{{ inventoryEditingItemId ? 'Edit item' : 'New item' }}</h3>
-          <div class="settings-grid">
-            <div class="form-group">
-              <label>Name</label>
-              <input type="text" [(ngModel)]="inventoryItemForm.name" placeholder="Item name" />
-            </div>
-            <div class="form-group">
-              <label>Category</label>
-              <select [(ngModel)]="inventoryItemForm.category">
-                <option [ngValue]="'consumable'">Consumable</option>
-                <option [ngValue]="'medicine'">Medicine</option>
-                <option [ngValue]="'equipment'">Equipment</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Unit</label>
-              <input type="text" [(ngModel)]="inventoryItemForm.unit" placeholder="pcs, box, bottle" />
-            </div>
-            <div class="form-group">
-              <label>Min stock (alert)</label>
-              <input type="number" min="0" [(ngModel)]="inventoryItemForm.minStock" />
-            </div>
-            <div class="form-group full-width">
-              <label>Description (optional)</label>
-              <textarea rows="2" [(ngModel)]="inventoryItemForm.description" placeholder="Notes"></textarea>
-            </div>
-          </div>
-          <div *ngIf="inventoryItemError" class="save-error">{{ inventoryItemError }}</div>
-          <div class="doctor-modal-actions">
-            <button class="btn-primary" type="button" [disabled]="inventoryItemSubmitting" (click)="saveInventoryItem()">
-              {{ inventoryItemSubmitting ? 'Saving…' : inventoryEditingItemId ? 'Update' : 'Create' }}
-            </button>
-            <button class="btn-icon ghost" type="button" (click)="closeInventoryItemForm()">Close</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="inventory-report-page" *ngIf="active === 'inventory-report'" @cardStagger>
-      <div class="inventory-page-head">
-        <div class="inventory-page-head-row">
-          <h2>Inventory — Report</h2>
-          <button
-            type="button"
-            class="inventory-help-btn"
-            (click)="openInventoryHelp()"
-            aria-label="How inventory works"
-            title="How inventory works"
-          >
-            <span class="inventory-help-ic" aria-hidden="true">?</span>
-          </button>
-        </div>
-        <p class="muted">Summary counts, low-stock alerts, and batches expiring within the next {{ inventoryReportData?.expiringWithinDays || 30 }} days.</p>
-      </div>
-      <div *ngIf="inventoryReportLoading" class="muted" style="padding: 12px">Loading…</div>
-
-      <div class="inventory-kpi-row" *ngIf="inventoryReportData && !inventoryReportLoading">
-        <article class="inventory-kpi glass-card">
-          <div class="inventory-kpi-label">Total items</div>
-          <div class="inventory-kpi-value">{{ inventoryReportTotalItems }}</div>
-          <div class="inventory-kpi-sub muted">Active items in catalog</div>
-        </article>
-        <article class="inventory-kpi glass-card alert-surface-low">
-          <div class="inventory-kpi-label">Low stock alerts</div>
-          <div class="inventory-kpi-value">{{ inventoryReportLowStockCount }}</div>
-          <div class="inventory-kpi-sub muted">Below minimum level</div>
-        </article>
-        <article class="inventory-kpi glass-card alert-surface-exp">
-          <div class="inventory-kpi-label">Expiring (30 days)</div>
-          <div class="inventory-kpi-value">{{ inventoryReportExpiringCount }}</div>
-          <div class="inventory-kpi-sub muted">Batches with expiry in window</div>
-        </article>
-      </div>
-
-      <div class="inventory-report-grid" *ngIf="inventoryReportData && !inventoryReportLoading">
-        <article class="glass-card inventory-section alert-surface-low">
-          <h3 class="inventory-section-title">Low stock</h3>
-          <p class="muted small" *ngIf="inventoryReportData.lowStockItems.length === 0">No low-stock items.</p>
-          <ul class="inventory-alert-list">
-            <li *ngFor="let it of inventoryReportData.lowStockItems" class="inventory-alert-item">
-              <strong>{{ it.name }}</strong>
-              <span class="muted"
-                >{{ it.totalQuantity }} {{ it.unit || 'units' }} (min {{ it.minStock }})</span
-              >
-            </li>
-          </ul>
-        </article>
-        <article class="glass-card inventory-section alert-surface-exp">
-          <h3 class="inventory-section-title">Expiring soon</h3>
-          <p class="muted small" *ngIf="inventoryReportData.expiringBatches.length === 0">No batches expiring in this window.</p>
-          <ul class="inventory-alert-list">
-            <li *ngFor="let ex of inventoryReportData.expiringBatches" class="inventory-alert-item">
-              <strong>{{ ex.itemName }}</strong>
-              <span *ngIf="ex.batchNumber" class="muted"> · {{ ex.batchNumber }}</span>
-              <span class="muted"> · qty {{ ex.quantity }} · expires {{ ex.expiryDate || '—' }}</span>
-            </li>
-          </ul>
-        </article>
-      </div>
-    </section>
+    <app-inventory-items-page *ngIf="active === 'inventory-items'" [canEdit]="canManageInventory"></app-inventory-items-page>
+    <app-inventory-stock-page *ngIf="active === 'inventory-stock'" [canEdit]="canManageInventory"></app-inventory-stock-page>
+    <app-inventory-reports-page *ngIf="active === 'inventory-report-expiring'" [mode]="'expiring'"></app-inventory-reports-page>
+    <app-inventory-reports-page *ngIf="active === 'inventory-report-expired'" [mode]="'expired'"></app-inventory-reports-page>
+    <app-inventory-reports-page *ngIf="active === 'inventory-report-low'" [mode]="'low'"></app-inventory-reports-page>
 
     <div
       class="doctor-modal-backdrop inventory-help-backdrop"
@@ -1241,6 +838,29 @@
         </div>
       </div>
     </div>
+
+    <section class="register-page module-about-page" *ngIf="isAboutPage && activeAboutDoc" @cardStagger>
+      <div class="register-header">
+        <h2>{{ activeAboutDoc.title }} — About</h2>
+        <button
+          type="button"
+          class="btn-icon ghost"
+          [disabled]="!canUseSpeech"
+          (click)="readAboutAloud()"
+          [attr.title]="canUseSpeech ? 'Read aloud' : 'Voice not supported in this browser'"
+        >
+          {{ isAboutSpeaking ? 'Stop speaker' : 'Play speaker' }}
+        </button>
+      </div>
+
+      <article class="glass-card module-about-card">
+        <p class="module-about-lead">{{ activeAboutDoc.summary }}</p>
+        <section class="module-about-block" *ngFor="let block of activeAboutDoc.sections">
+          <h3>{{ block.heading }}</h3>
+          <p>{{ block.body }}</p>
+        </section>
+      </article>
+    </section>
 
     <section class="transactions-page" *ngIf="active === 'transactions-dashboard'" @cardStagger>
       <div class="inventory-page-head">
@@ -1472,10 +1092,10 @@
             <input type="number" min="0" step="0.01" [(ngModel)]="billForm.discount" />
           </div>
         </div>
-        <table class="register-table" style="margin-top: 12px">
+        <table class="register-table bill-lines-table" style="margin-top: 12px">
           <thead>
             <tr>
-              <th>Service / item</th>
+              <th>Service / item &amp; inventory</th>
               <th>Qty</th>
               <th>Price</th>
               <th></th>
@@ -1483,8 +1103,29 @@
           </thead>
           <tbody>
             <tr *ngFor="let line of billForm.items; let i = index">
-              <td><input type="text" [(ngModel)]="line.itemName" placeholder="Description" /></td>
-              <td><input type="number" min="1" [(ngModel)]="line.quantity" /></td>
+              <td>
+                <input type="text" [(ngModel)]="line.itemName" placeholder="Description" />
+                <div class="bill-inv-block" *ngIf="billInventoryItemOptions.length">
+                  <span class="muted small">Stock link</span>
+                  <app-item-dropdown
+                    [items]="billInventoryItemOptions"
+                    [(value)]="line.inventoryItemId"
+                    placeholder="None (no deduction)"
+                    (valueChange)="onBillLineInventoryChange(line)"
+                  ></app-item-dropdown>
+                </div>
+                <p class="muted small" *ngIf="line.stockHint">{{ line.stockHint }}</p>
+                <p class="save-error small" *ngIf="line.stockError">{{ line.stockError }}</p>
+              </td>
+              <td>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  [(ngModel)]="line.quantity"
+                  (ngModelChange)="validateBillLineQty(line)"
+                />
+              </td>
               <td><input type="number" min="0" step="0.01" [(ngModel)]="line.price" /></td>
               <td>
                 <button type="button" class="btn-icon ghost" (click)="removeBillLine(i)" [disabled]="billForm.items.length <= 1">✕</button>
@@ -1864,6 +1505,9 @@
         <p class="muted">Select a patient, upload files (X-rays, reports), then view, download, edit metadata, or delete.</p>
       </div>
       <article class="glass-card inventory-section">
+        <p class="muted" *ngIf="docMgmtDropdownsNeedSingleClinic" style="margin: 0 0 12px">
+          Choose one clinic in the header switcher (not “All clinics”) to load patients for this clinic only.
+        </p>
         <div class="inventory-toolbar doc-toolbar">
           <input type="search" class="inventory-search" [(ngModel)]="docPatientSearch" placeholder="Filter patient list…" />
           <select [(ngModel)]="docPatientId" (ngModelChange)="onDocPatientSelected()">
@@ -1923,6 +1567,9 @@
         <p class="muted">Clinical documents per patient; optional appointment filter and link on upload.</p>
       </div>
       <article class="glass-card inventory-section">
+        <p class="muted" *ngIf="docMgmtDropdownsNeedSingleClinic" style="margin: 0 0 12px">
+          Choose one clinic in the header switcher (not “All clinics”) to load patients and appointments for this clinic only.
+        </p>
         <div class="inventory-toolbar doc-toolbar">
           <select [(ngModel)]="docMedPatientId" (ngModelChange)="onDocMedPatientChange()">
             <option [ngValue]="null">Select patient</option>
@@ -1994,6 +1641,9 @@
         <p class="muted">Receipts and invoices linked to a bill.</p>
       </div>
       <article class="glass-card inventory-section">
+        <p class="muted" *ngIf="docMgmtDropdownsNeedSingleClinic" style="margin: 0 0 12px">
+          Choose one clinic in the header switcher (not “All clinics”) to load bills for this clinic only.
+        </p>
         <div class="inventory-toolbar doc-toolbar">
           <select [(ngModel)]="docBillId" (ngModelChange)="onDocBillSelected()">
             <option [ngValue]="null">Select bill</option>
@@ -2051,6 +1701,9 @@
         <p class="muted">Certificates, licenses, and credentials per doctor.</p>
       </div>
       <article class="glass-card inventory-section">
+        <p class="muted" *ngIf="docMgmtDropdownsNeedSingleClinic" style="margin: 0 0 12px">
+          Choose one clinic in the header switcher (not “All clinics”) to load doctors for this clinic only.
+        </p>
         <div class="inventory-toolbar doc-toolbar">
           <select [(ngModel)]="docDoctorId" (ngModelChange)="onDocDoctorSelected()">
             <option [ngValue]="null">Select doctor</option>
@@ -2308,7 +1961,11 @@
       </div>
     </div>
 
-    <section class="register-page" *ngIf="isRegisterPage && active !== 'appointment-register' && active !== 'inventory-register'" @cardStagger>
+    <section
+      class="register-page"
+      *ngIf="isRegisterPage && active !== 'appointment-register' && !active.startsWith('inventory-')"
+      @cardStagger
+    >
       <div class="register-header">
         <div>
           <h2>{{ activeRegisterKey | titlecase }} Register</h2>
@@ -3434,13 +3091,6 @@
             </button>
           </div>
         </div>
-        <app-workflow-execution-panel
-          *ngIf="complaintDetailId"
-          entityType="complaint"
-          [entityId]="complaintDetailId"
-          [canTransition]="canManageUserAccounts"
-        ></app-workflow-execution-panel>
-
         <div class="glass-card maintenance-attachments" style="margin-top:14px;">
           <h3 class="mini-title">Attachments</h3>
           <ul class="maintenance-attach-list" *ngIf="d.attachments.length; else noAtt">
@@ -3471,39 +3121,6 @@
           </ul>
         </div>
       </ng-container>
-    </section>
-
-    <section
-      class="register-page maintenance-page"
-      *ngIf="active === 'config-workflows' && canManageUserAccounts"
-      @cardStagger
-    >
-      <div class="register-header wf-config-hero">
-        <div class="wf-config-hero-text">
-          <h2>Workflows</h2>
-          <p class="muted">Define flows per entity type. Only one workflow can be active per type.</p>
-        </div>
-        <div class="wf-config-hero-accent" aria-hidden="true"></div>
-      </div>
-      <app-workflow-list (openBuilder)="openWorkflowBuilder($event)"></app-workflow-list>
-    </section>
-
-    <section
-      class="register-page maintenance-page"
-      *ngIf="active === 'config-workflow-builder' && canManageUserAccounts && workflowBuilderId != null"
-      @cardStagger
-    >
-      <div class="register-header wf-config-hero wf-config-hero--compact">
-        <div class="wf-config-hero-text">
-          <h2>Workflow editor</h2>
-          <p class="muted">Visual graph for this workflow — save when you are done.</p>
-        </div>
-        <div class="wf-config-hero-accent" aria-hidden="true"></div>
-      </div>
-      <app-workflow-builder
-        [workflowId]="workflowBuilderId"
-        (closed)="backFromWorkflowBuilder()"
-      ></app-workflow-builder>
     </section>
 
     <div
@@ -3537,8 +3154,7 @@
         active !== 'patients-report' &&
         active !== 'appointment-report' &&
         active !== 'appointment-all' &&
-        active !== 'inventory-register' &&
-        active !== 'inventory-report' &&
+        !isInventoryModule &&
         !isTransactionsModule &&
         !isDocumentsModule &&
         !isMaintenanceModule &&

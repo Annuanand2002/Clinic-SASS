@@ -10,6 +10,7 @@
  * - { "in": [ pathOrLiteral, [ "a", "b" ] ] }
  * - { "all": [ subCondition, ... ] }
  * - { "any": [ subCondition, ... ] }
+ * - { "not": subCondition } — negates subCondition
  *
  * Paths: "context.user.role", "context.entity.priority", dot notation.
  */
@@ -47,6 +48,10 @@ function evaluateCondition(conditionJson, context) {
     }
   }
   if (typeof cond !== 'object' || cond === null) return true;
+
+  if (cond.not !== undefined && cond.not !== null) {
+    return !evaluateCondition(cond.not, context);
+  }
 
   if (Array.isArray(cond.all)) {
     return cond.all.every((c) => evaluateCondition(c, context));

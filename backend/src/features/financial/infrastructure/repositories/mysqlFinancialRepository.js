@@ -1,5 +1,6 @@
 const { getPool } = require('../../../../core/db/pool');
 const { sqlClinicColumn } = require('../../../../core/clinic/clinicScope');
+const inventoryService = require('../../../inventory/application/inventoryService');
 
 function normalizePagination(pageInput, limitInput) {
   const page = Math.max(1, Number(pageInput) || 1);
@@ -95,13 +96,26 @@ async function createBill(payload, clinicId) {
     const billId = ins.insertId;
 
     for (const it of items) {
-      const qty = Math.max(1, Number(it.quantity) || 1);
+      const qty = Math.max(1, Math.floor(Number(it.quantity) || 1));
       const price = Math.max(0, Number(it.price) || 0);
       const name = String(it.itemName || it.name || 'Item').trim() || 'Item';
+      const invRaw = it.inventoryItemId != null && it.inventoryItemId !== '' ? Number(it.inventoryItemId) : null;
+      const invId = invRaw && Number.isFinite(invRaw) && invRaw > 0 ? invRaw : null;
       await connection.query(
-        `INSERT INTO billing_items (billing_id, item_name, quantity, price) VALUES (?, ?, ?, ?)`,
-        [billId, name, qty, price]
+        `INSERT INTO billing_items (billing_id, item_name, quantity, price, inventory_item_id) VALUES (?, ?, ?, ?, ?)`,
+        [billId, name, qty, price, invId]
       );
+      if (invId) {
+        await inventoryService.deductFifoOnConnection(connection, {
+          itemId: invId,
+          quantity: qty,
+          clinicId: cid,
+          referenceType: 'billing',
+          referenceId: billId,
+          notes: name,
+          expiryMode: 'skip'
+        });
+      }
     }
 
     await connection.commit();
@@ -184,7 +198,9 @@ async function getBillById(billId, scope) {
   if (!rows?.[0]) return null;
   const b = rows[0];
   const [items] = await pool.query(
-    `SELECT id, item_name AS itemName, quantity, price FROM billing_items WHERE billing_id = ? ORDER BY id`,
+    `SELECT id, item_name AS itemName, quantity, price,
+            inventory_item_id AS inventoryItemId
+     FROM billing_items WHERE billing_id = ? ORDER BY id`,
     [billId]
   );
   const [paidRows] = await pool.query(
@@ -206,7 +222,8 @@ async function getBillById(billId, scope) {
       id: i.id,
       itemName: i.itemName,
       quantity: Number(i.quantity),
-      price: Number(i.price)
+      price: Number(i.price),
+      inventoryItemId: i.inventoryItemId != null ? Number(i.inventoryItemId) : null
     }))
   };
 }
@@ -395,10 +412,11 @@ async function createExpense(payload, scope) {
 
       const [sins] = await connection.query(
         `INSERT INTO inventory_stock (
-          item_id, quantity, batch_number, expiry_date, purchase_date, purchase_price, supplier_name, clinic_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          item_id, quantity, remaining_quantity, batch_number, expiry_date, purchase_date, purchase_price, supplier_name, clinic_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           itemId,
+          qty,
           qty,
           inv.batchNumber || null,
           inv.expiryDate || null,
@@ -441,9 +459,9 @@ async function createExpense(payload, scope) {
 
     if (stockId && invItemId) {
       await connection.query(
-        `INSERT INTO stock_movement (item_id, type, quantity, reference_type, reference_id, notes, clinic_id)
-         VALUES (?, 'IN', ?, 'expense', ?, ?, ?)`,
-        [invItemId, invQty, expenseId, title, cid]
+        `INSERT INTO stock_movement (item_id, stock_id, type, quantity, reference_type, reference_id, notes, clinic_id)
+         VALUES (?, ?, 'IN', ?, 'expense', ?, ?, ?)`,
+        [invItemId, stockId, invQty, expenseId, title, cid]
       );
     }
 

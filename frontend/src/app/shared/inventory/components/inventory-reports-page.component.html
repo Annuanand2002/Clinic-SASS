@@ -1,0 +1,45 @@
+<section class="inventory-page">
+  <header
+    class="inventory-hero inventory-hero--reports"
+    [class.inventory-hero--reports-expiring]="mode === 'expiring'"
+    [class.inventory-hero--reports-expired]="mode === 'expired'"
+    [class.inventory-hero--reports-low]="mode === 'low'"
+  >
+    <div class="inventory-hero-text">
+      <p class="inventory-hero-kicker">Reports</p>
+      <h2>Inventory — {{ title() }}</h2>
+      <p class="muted" *ngIf="mode === 'expiring'">Batches expiring within 7 days (with remaining quantity).</p>
+      <p class="muted" *ngIf="mode === 'expired'">Batches past expiry with remaining quantity.</p>
+      <p class="muted" *ngIf="mode === 'low'">Items where available stock is below minimum.</p>
+    </div>
+    <div class="inventory-hero-accent" aria-hidden="true"></div>
+  </header>
+
+  <article class="glass-card inventory-section inventory-card--report">
+    <div class="inventory-toolbar wrap">
+      <div class="form-group tight">
+        <label>Item</label>
+        <select class="inventory-select" [(ngModel)]="filterItemId" (change)="load()">
+          <option [ngValue]="null">All</option>
+          <option *ngFor="let o of itemOptions" [ngValue]="o.id">{{ o.name }}</option>
+        </select>
+      </div>
+      <div class="form-group tight" *ngIf="mode !== 'low'">
+        <label>Expiry from</label>
+        <input type="date" [(ngModel)]="fromDate" (change)="load()" />
+      </div>
+      <div class="form-group tight" *ngIf="mode !== 'low'">
+        <label>Expiry to</label>
+        <input type="date" [(ngModel)]="toDate" (change)="load()" />
+      </div>
+      <button type="button" class="btn-icon ghost" (click)="load()">Refresh</button>
+    </div>
+
+    <app-report-table
+      [columns]="reportColumns"
+      [rows]="reportData"
+      [loading]="loading"
+      [emptyMessage]="'No rows match filters.'"
+    ></app-report-table>
+  </article>
+</section>

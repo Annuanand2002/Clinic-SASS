@@ -1,6 +1,5 @@
 const { getPool } = require('../../../../core/db/pool');
 const { sqlClinicColumn } = require('../../../../core/clinic/clinicScope');
-const { initializeEntityWorkflowScoped } = require('../../../workflow/application/workflowEngine');
 
 function mapAppointmentRow(row) {
   return {
@@ -200,7 +199,6 @@ async function createAppointment(payload, clinicId, scope) {
       ]
     );
     const appointmentId = Number(ins.insertId);
-    await initializeEntityWorkflowScoped(connection, 'appointment', appointmentId, scope, null);
     await connection.commit();
     return appointmentId;
   } catch (e) {

@@ -13,6 +13,9 @@ function errorHandler(err, req, res, next) {
   if (err.code === 'INSUFFICIENT_STOCK' && err.available != null) {
     body.available = err.available;
   }
+  if (err.code === 'EXPIRED_STOCK_PRESENT') {
+    body.code = err.code;
+  }
   res.status(status).json(body);
 }
 

@@ -2140,12 +2140,28 @@ tbody tr:last-child td:last-child {
   }
 }
 
-/* Inventory module */
-.inventory-page,
-.inventory-report-page {
-  padding: 0 24px 40px;
-  max-width: 1180px;
-  margin: 0 auto;
+.bill-inv-block {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bill-lines-table td {
+  vertical-align: top;
+}
+
+/* Inventory module: page shell / heroes / host-only UI live in inventory-host-bridge.css (global). */
+.inventory-section-title {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.inventory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
 }
 .inventory-page-head {
   margin-bottom: 20px;
@@ -2280,18 +2296,6 @@ tbody tr:last-child td:last-child {
 .inventory-section {
   padding: 20px 22px;
   margin-bottom: 18px;
-}
-.inventory-section-title {
-  margin: 0 0 12px;
-  font-size: 1.05rem;
-  font-weight: 800;
-}
-.inventory-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 14px;
 }
 .inventory-search {
   flex: 1;
@@ -3128,6 +3132,51 @@ tbody tr:last-child td:last-child {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px 12px;
+}
+
+.module-about-page {
+  max-width: 980px;
+  margin: 14px auto 0;
+}
+
+.module-about-card {
+  padding: 18px 20px;
+}
+
+.module-about-lead {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #475569;
+}
+
+.module-about-block {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.module-about-block h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #312e81;
+}
+
+.module-about-block p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+.dark-theme .module-about-lead,
+.dark-theme .module-about-block p {
+  color: #cbd5e1;
+}
+
+.dark-theme .module-about-block h3 {
+  color: #c7d2fe;
 }
 table tr.click-row {
   cursor: pointer;

@@ -1,0 +1,11 @@
+.inventory-toolbar.wrap {
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.form-group.tight label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}

@@ -17,25 +17,50 @@ async function ensureColumnExists(tableName, columnName, definitionSql) {
   await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${definitionSql}`);
 }
 
-/** At most one workflow row per entity_type (complaint, appointment, …). */
-async function ensureUniqueWorkflowEntityTypeIndex() {
+/**
+ * Multiple workflow rows may share entity_type; only one should be active (enforced in API).
+ * Drops legacy unique index if present so new workflows per entity type can be inserted.
+ */
+async function ensureWorkflowAllowsMultiplePerEntityType() {
   const pool = getPool();
-  const [idxRows] = await pool.query(
-    `SELECT COUNT(*) AS cnt
-     FROM information_schema.STATISTICS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'workflow'
-       AND INDEX_NAME = 'uq_workflow_entity_type'`
-  );
-  if (Number(idxRows?.[0]?.cnt || 0) > 0) return;
   try {
-    await pool.query('CREATE UNIQUE INDEX uq_workflow_entity_type ON workflow (entity_type)');
+    const [idxRows] = await pool.query(
+      `SELECT COUNT(*) AS cnt
+       FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'workflow'
+         AND INDEX_NAME = 'uq_workflow_entity_type'`
+    );
+    if (Number(idxRows?.[0]?.cnt || 0) === 0) return;
+    await pool.query('ALTER TABLE workflow DROP INDEX uq_workflow_entity_type');
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn(
-      '[db] could not create uq_workflow_entity_type (duplicate entity_type rows?). Keep one workflow per type, then restart:',
-      err?.message || err
+    console.warn('[db] ensureWorkflowAllowsMultiplePerEntityType:', err?.message || err);
+  }
+}
+
+/** Allow duplicate usernames (e.g. multiple doctors/patients); email stays unique for login. */
+async function ensureUsersUsernameAllowsDuplicates() {
+  const pool = getPool();
+  try {
+    const [rows] = await pool.query(
+      `SELECT DISTINCT INDEX_NAME AS idx
+       FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'users'
+         AND COLUMN_NAME = 'username'
+         AND NON_UNIQUE = 0`
     );
+    for (const row of rows || []) {
+      const idx = row && row.idx != null ? String(row.idx) : '';
+      if (!idx || idx === 'PRIMARY') continue;
+      const safe = idx.replace(/[^a-zA-Z0-9_]/g, '');
+      if (safe !== idx) continue;
+      await pool.query(`ALTER TABLE users DROP INDEX \`${safe}\``);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[db] ensureUsersUsernameAllowsDuplicates:', err?.message || err);
   }
 }
 
@@ -48,7 +73,7 @@ async function ensureAuthTables() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id BIGINT NOT NULL AUTO_INCREMENT,
-        username VARCHAR(100) UNIQUE,
+        username VARCHAR(100),
         email VARCHAR(150) UNIQUE,
         password VARCHAR(255) NOT NULL,
         role_id INT DEFAULT NULL,
@@ -68,7 +93,7 @@ async function ensureAuthTables() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id BIGINT NOT NULL AUTO_INCREMENT,
-        username VARCHAR(100) UNIQUE,
+        username VARCHAR(100),
         email VARCHAR(150) UNIQUE,
         password VARCHAR(255) NOT NULL,
         role_id INT DEFAULT NULL,
@@ -78,6 +103,8 @@ async function ensureAuthTables() {
       );
     `);
   }
+
+  await ensureUsersUsernameAllowsDuplicates();
 
   const seed = String(process.env.SEED_DEMO_USER || '').toLowerCase() === 'true';
   if (!seed) return;
@@ -311,6 +338,16 @@ async function ensureInventoryTables() {
         ON DELETE CASCADE
     );
   `);
+
+  await ensureColumnExists('inventory_item', 'clinic_id', 'clinic_id BIGINT NULL');
+  await ensureColumnExists('inventory_stock', 'clinic_id', 'clinic_id BIGINT NULL');
+  await ensureColumnExists('inventory_stock', 'remaining_quantity', 'remaining_quantity INT NULL');
+  await ensureColumnExists('stock_movement', 'clinic_id', 'clinic_id BIGINT NULL');
+  await ensureColumnExists('stock_movement', 'stock_id', 'stock_id BIGINT NULL');
+
+  await pool.query(
+    `UPDATE inventory_stock SET remaining_quantity = quantity WHERE remaining_quantity IS NULL`
+  );
 }
 
 /**
@@ -442,7 +479,7 @@ async function ensureWorkflowTables() {
   await ensureColumnExists('complaint', 'current_node_id', 'current_node_id BIGINT NULL');
   await ensureColumnExists('appointment', 'current_node_id', 'current_node_id BIGINT NULL');
 
-  await ensureUniqueWorkflowEntityTypeIndex();
+  await ensureWorkflowAllowsMultiplePerEntityType();
 
   await seedDefaultWorkflowGraphs(pool);
 }
@@ -614,6 +651,12 @@ async function ensureFinancialTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  await ensureColumnExists('billing', 'clinic_id', 'clinic_id BIGINT NULL');
+  await ensureColumnExists('billing_items', 'inventory_item_id', 'inventory_item_id BIGINT NULL');
+  await ensureColumnExists('payments', 'clinic_id', 'clinic_id BIGINT NULL');
+  await ensureColumnExists('expense', 'clinic_id', 'clinic_id BIGINT NULL');
+  await ensureColumnExists('transactions', 'clinic_id', 'clinic_id BIGINT NULL');
 }
 
 module.exports = {

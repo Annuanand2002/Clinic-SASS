@@ -1,0 +1,141 @@
+<section class="inventory-page">
+  <header class="inventory-hero inventory-hero--items">
+    <div class="inventory-hero-text">
+      <p class="inventory-hero-kicker">Catalog</p>
+      <h2>Inventory — Items</h2>
+      <p class="muted">Define products and medicines; “Available” is usable stock (non-expired batches).</p>
+    </div>
+    <div class="inventory-hero-accent" aria-hidden="true"></div>
+  </header>
+
+  <article class="glass-card inventory-section inventory-card--catalog">
+    <div class="inventory-toolbar">
+      <input
+        type="text"
+        class="inventory-search"
+        [(ngModel)]="search"
+        (input)="onSearchInput()"
+        placeholder="Search by name…"
+      />
+      <select class="inventory-select" [(ngModel)]="categoryFilter" (change)="onCategoryChange()">
+        <option value="">All categories</option>
+        <option *ngFor="let c of meta?.categories || []" [value]="c.value">{{ c.label }}</option>
+      </select>
+      <button *ngIf="canEdit" class="btn-primary" type="button" (click)="openCreate()">+ Add item</button>
+    </div>
+
+    <p *ngIf="loading" class="muted loading-line">Loading…</p>
+    <div class="table-wrap" *ngIf="!loading">
+      <table class="register-table inventory-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Unit</th>
+            <th>Min stock</th>
+            <th>Available</th>
+            <th>Status</th>
+            <th *ngIf="canEdit">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of items; let i = index">
+            <td>{{ (pagination.page - 1) * pagination.limit + i + 1 }}</td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.category }}</td>
+            <td>{{ row.unit || '—' }}</td>
+            <td>{{ row.minStock }}</td>
+            <td>{{ row.totalQuantity != null ? row.totalQuantity : '—' }}</td>
+            <td>
+              <span
+                class="inventory-item-status"
+                [class.inventory-item-status--active]="row.isActive"
+                [class.inventory-item-status--inactive]="!row.isActive"
+              >
+                {{ statusLabel(row) }}
+              </span>
+            </td>
+            <td *ngIf="canEdit">
+              <button class="btn-icon ghost" type="button" title="Edit" (click)="openEdit(row)">✎</button>
+              <button class="btn-icon ghost" type="button" title="Delete" (click)="remove(row)">🗑</button>
+            </td>
+          </tr>
+          <tr *ngIf="items.length === 0">
+            <td [attr.colspan]="canEdit ? 8 : 7" class="muted" style="text-align: center; padding: 18px">No items yet.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="table-footer" *ngIf="!loading && pagination.totalPages > 0">
+      <div class="table-footer-inner">
+        <span class="table-footer-meta">Page {{ pagination.page }} of {{ pagination.totalPages }}</span>
+        <div class="table-footer-controls">
+          <button class="table-footer-btn" type="button" (click)="changePage('prev')" [disabled]="pagination.page <= 1">
+            Previous
+          </button>
+          <button
+            class="table-footer-btn"
+            type="button"
+            (click)="changePage('next')"
+            [disabled]="pagination.page >= pagination.totalPages"
+          >
+            Next
+          </button>
+          <input type="number" class="table-footer-input" [(ngModel)]="pageInput" />
+          <button class="table-footer-btn primary" type="button" (click)="jumpPage()">Go</button>
+        </div>
+      </div>
+    </footer>
+  </article>
+
+  <div class="modal-backdrop" *ngIf="formOpen" (click)="closeForm()"></div>
+  <div class="modal-panel" *ngIf="formOpen">
+    <h3>{{ editingId != null ? 'Edit item' : 'New item' }}</h3>
+    <div class="settings-grid">
+      <div class="form-group full-width">
+        <label>Name</label>
+        <input type="text" [(ngModel)]="form.name" />
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select [(ngModel)]="form.category">
+          <option *ngFor="let c of meta?.categories || []" [ngValue]="c.value">{{ c.label }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Unit (preset)</label>
+        <select [(ngModel)]="unitPreset" (ngModelChange)="onUnitPresetChange()">
+          <option value="">— Custom —</option>
+          <option *ngFor="let u of meta?.units || []" [value]="u.value">{{ u.label }}</option>
+        </select>
+      </div>
+      <div class="form-group full-width">
+        <label>Unit value</label>
+        <input type="text" [(ngModel)]="form.unit" placeholder="e.g. box, mL" />
+      </div>
+      <div class="form-group">
+        <label>Min stock</label>
+        <input type="number" min="0" [(ngModel)]="form.minStock" />
+      </div>
+      <div class="form-group full-width">
+        <label>Description</label>
+        <textarea rows="2" [(ngModel)]="form.description"></textarea>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" [(ngModel)]="form.isActive" />
+          Active
+        </label>
+      </div>
+    </div>
+    <p *ngIf="formError" class="save-error">{{ formError }}</p>
+    <div class="modal-actions">
+      <button type="button" class="btn-icon ghost" (click)="closeForm()">Cancel</button>
+      <button type="button" class="btn-primary" [disabled]="submitting" (click)="save()">
+        {{ submitting ? 'Saving…' : 'Save' }}
+      </button>
+    </div>
+  </div>
+</section>

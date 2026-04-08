@@ -1,4 +1,5 @@
 const repo = require('../repositories/mysqlInventoryRepository');
+const inventoryService = require('../../application/inventoryService');
 const { scopeFromReq, rejectIfClinicScopeAllCreate } = require('../../../../core/clinic/clinicScope');
 
 const CATEGORIES = new Set(['consumable', 'medicine', 'equipment']);
@@ -8,6 +9,54 @@ function validateCategory(category) {
     const err = new Error(`category must be one of: ${[...CATEGORIES].join(', ')}`);
     err.statusCode = 400;
     throw err;
+  }
+}
+
+function meta(req, res) {
+  return res.json({
+    categories: [
+      { value: 'consumable', label: 'Consumable' },
+      { value: 'medicine', label: 'Medicine' },
+      { value: 'equipment', label: 'Equipment' }
+    ],
+    units: [
+      { value: 'piece', label: 'Piece' },
+      { value: 'box', label: 'Box' },
+      { value: 'strip', label: 'Strip' },
+      { value: 'bottle', label: 'Bottle' },
+      { value: 'vial', label: 'Vial' },
+      { value: 'pack', label: 'Pack' },
+      { value: 'ml', label: 'mL' },
+      { value: 'g', label: 'g' },
+      { value: 'unit', label: 'Unit' }
+    ]
+  });
+}
+
+async function itemAvailability(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const data = await inventoryService.getItemAvailability(id, scopeFromReq(req));
+    return res.json(data);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function batchesReport(req, res, next) {
+  try {
+    const rows = await repo.listBatchesReport(
+      {
+        mode: req.query.mode,
+        itemId: req.query.itemId,
+        fromDate: req.query.fromDate,
+        toDate: req.query.toDate
+      },
+      scopeFromReq(req)
+    );
+    return res.json({ batches: rows });
+  } catch (err) {
+    return next(err);
   }
 }
 
@@ -165,6 +214,9 @@ async function movements(req, res, next) {
 }
 
 module.exports = {
+  meta,
+  itemAvailability,
+  batchesReport,
   listItems,
   getItem,
   createItem,

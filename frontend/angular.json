@@ -24,8 +24,7 @@
               "src/manifest.webmanifest"
             ],
             "styles": [
-              "src/styles.css",
-              "src/app/features/workflow/workflow-host-bridge.css"
+              "src/styles.css"
             ],
             "scripts": [],
             "allowedCommonJsDependencies": [
@@ -104,8 +103,7 @@
               "src/manifest.webmanifest"
             ],
             "styles": [
-              "src/styles.css",
-              "src/app/features/workflow/workflow-host-bridge.css"
+              "src/styles.css"
             ],
             "scripts": []
           }

@@ -221,7 +221,7 @@ async function createPatient(payload, actorId, clinicId) {
     await connection.rollback();
     if (err && err.code === 'ER_DUP_ENTRY') {
       const e = new Error(
-        'Could not create patient: this email (or username) may already exist for this clinic, or conflicts with another account.'
+        'Could not create patient: this email may already exist for this clinic or conflicts with another account.'
       );
       e.statusCode = 409;
       throw e;

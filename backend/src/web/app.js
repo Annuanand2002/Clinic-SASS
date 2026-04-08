@@ -15,7 +15,6 @@ const attachmentRoutes = require('../features/attachment/infrastructure/routes/a
 const usersRoutes = require('../features/users/infrastructure/routes/usersRoutes');
 const clinicRoutes = require('../features/clinic/infrastructure/routes/clinicRoutes');
 const complaintRoutes = require('../features/complaint/infrastructure/routes/complaintRoutes');
-const workflowRoutes = require('../features/workflow/infrastructure/routes/workflowRoutes');
 
 const app = express();
 
@@ -41,7 +40,6 @@ app.use('/api/attachments', attachmentRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/clinics', clinicRoutes);
 app.use('/api/complaints', complaintRoutes);
-app.use('/api/workflow', workflowRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

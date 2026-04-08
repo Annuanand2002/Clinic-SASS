@@ -8,6 +8,8 @@ import { forkJoin, of, firstValueFrom } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
 import { ToastService } from '../../../core/ui/toast.service';
+import { InventoryApiService } from '../../../shared/inventory/inventory-api.service';
+import { BillingApiService } from '../../../shared/inventory/billing-api.service';
 
 interface SidebarItem {
   key: string;
@@ -15,6 +17,12 @@ interface SidebarItem {
   iconText: string;
   children?: SidebarItem[];
   expanded?: boolean;
+}
+
+interface ModuleAboutDoc {
+  title: string;
+  summary: string;
+  sections: Array<{ heading: string; body: string }>;
 }
 
 type NotificationSection = 'email' | 'message';
@@ -241,6 +249,8 @@ interface ComplaintDetailDto {
   ]
 })
 export class HomeComponent implements OnInit {
+  private readonly defaultTabTitle = 'Dental Clinic';
+  private readonly defaultFaviconPath = 'favicon.ico';
   private readonly organisationApiUrl = `${environment.apiUrl}/api/organisation`;
   private readonly doctorApiUrl = `${environment.apiUrl}/api/doctors`;
   private readonly patientApiUrl = `${environment.apiUrl}/api/patients`;
@@ -645,14 +655,34 @@ export class HomeComponent implements OnInit {
     appointmentId: number | null;
     billDate: string;
     discount: number;
-    items: Array<{ itemName: string; quantity: number; price: number }>;
+    items: Array<{
+      itemName: string;
+      quantity: number;
+      price: number;
+      inventoryItemId: number | null;
+      availableQty: number | null;
+      stockHint: string;
+      stockError: string;
+    }>;
   } = {
     patientId: null,
     appointmentId: null,
     billDate: '',
     discount: 0,
-    items: [{ itemName: '', quantity: 1, price: 0 }]
+    items: [
+      {
+        itemName: '',
+        quantity: 1,
+        price: 0,
+        inventoryItemId: null,
+        availableQty: null,
+        stockHint: '',
+        stockError: ''
+      }
+    ]
   };
+
+  billInventoryItemOptions: Array<{ id: number; name: string }> = [];
   billSubmitting = false;
   billError = '';
   paymentList: Array<{
@@ -732,7 +762,8 @@ export class HomeComponent implements OnInit {
   docDoctors: Array<{ id: number; name: string }> = [];
   docAppointments: AppointmentRow[] = [];
   docBillsSelect: Array<{ id: number; label: string }> = [];
-  docRefDataLoaded = false;
+  /** Last X-Clinic-Id header value (or '') used to load doc dropdown data; mismatch → reload. */
+  private docReferenceDataClinicKey: string | null = null;
 
   docPatientSearch = '';
   docPatientId: number | null = null;
@@ -833,11 +864,110 @@ export class HomeComponent implements OnInit {
   selectedClinicIdUi: number | typeof SELECTED_CLINIC_ALL | null = null;
 
   readonly SELECTED_CLINIC_ALL = SELECTED_CLINIC_ALL;
+  isAboutSpeaking = false;
+
+  private readonly moduleAboutDocs: Record<string, ModuleAboutDoc> = {
+    doctor: {
+      title: 'Doctor Module',
+      summary: 'Manage doctor records and monitor doctor-wise appointment activity.',
+      sections: [
+        { heading: 'Register', body: 'Use Register to add, edit, search, and maintain doctor profiles including consultation fee and account status.' },
+        { heading: 'Report', body: 'Use Report to review doctor performance and appointment trends by doctor for planning and workload visibility.' }
+      ]
+    },
+    patients: {
+      title: 'Patients Module',
+      summary: 'Handle complete patient lifecycle from registration to reporting.',
+      sections: [
+        { heading: 'Register', body: 'Register lists patients with filters, quick actions, and update tools for demographic and account details.' },
+        { heading: 'Create', body: 'Create opens the patient intake form for adding new patient records with required information.' },
+        { heading: 'Report', body: 'Report provides patient-centered analytics and medical-record related views for follow-up and auditing.' }
+      ]
+    },
+    appointment: {
+      title: 'Appointment Module',
+      summary: 'Schedule, review, and analyze appointments across calendar and reports.',
+      sections: [
+        { heading: 'Calendar', body: 'Calendar is the daily scheduling workspace for creating and updating appointments with doctor, patient, and status.' },
+        { heading: 'All Appointments', body: 'All Appointments provides a broader date-based calendar and list perspective for cross-day operational tracking.' },
+        { heading: 'Report', body: 'Report summarizes appointment data for analysis of attendance, completion patterns, and service demand.' }
+      ]
+    },
+    staff: {
+      title: 'Staff Module',
+      summary: 'Maintain non-doctor team members and their profile information.',
+      sections: [
+        { heading: 'Register', body: 'Register allows admins to add, edit, and monitor staff records and account activity in one place.' }
+      ]
+    },
+    clinic: {
+      title: 'Clinic Module',
+      summary: 'Manage clinic branches and multi-clinic operational setup.',
+      sections: [
+        { heading: 'Manage Clinics', body: 'Manage Clinics lets authorized users create and update clinic branches, then operate data with clinic scope selection.' }
+      ]
+    },
+    inventory: {
+      title: 'Inventory Module',
+      summary: 'Track items, stock batches, expiry risk, and low-stock alerts.',
+      sections: [
+        { heading: 'Items', body: 'Items stores item master data like category, unit, minimum stock, and active status for day-to-day stock operations.' },
+        { heading: 'Stock (Batches)', body: 'Stock handles batch-level inflow, purchase details, remaining quantity, and expiry-aware visibility.' },
+        { heading: 'Reports', body: 'Reports shows expiring, expired, and low-stock views so teams can prevent shortages and wastage.' }
+      ]
+    },
+    maintenance: {
+      title: 'Maintenance Module',
+      summary: 'Raise, follow, and manage operational complaints with full status history.',
+      sections: [
+        { heading: 'Raise Complaint', body: 'Staff can submit new complaints with context and supporting attachments.' },
+        { heading: 'My Complaints', body: 'Users can track their submitted complaints, status updates, and latest responses.' },
+        { heading: 'All Complaints', body: 'Admins can review all complaints, assign actions, update status, and monitor resolution timeline.' }
+      ]
+    },
+    transactions: {
+      title: 'Transactions Module',
+      summary: 'Control billing, payments, expenses, and ledger reporting in one financial workspace.',
+      sections: [
+        { heading: 'Dashboard', body: 'Dashboard presents high-level financial KPIs, charts, and pending values for quick executive review.' },
+        { heading: 'Billing', body: 'Billing creates and manages bills, line items, and patient charge records.' },
+        { heading: 'Payments', body: 'Payments records incoming collections against bills with method and status tracking.' },
+        { heading: 'Expenses', body: 'Expenses captures operational and inventory spend for complete P&L visibility.' },
+        { heading: 'Transactions Log', body: 'Transactions Log combines income and expense entries with filters for audit and reconciliation.' }
+      ]
+    },
+    documents: {
+      title: 'Document Management Module',
+      summary: 'Upload, categorize, and retrieve patient and operational documents.',
+      sections: [
+        { heading: 'Patient Documents', body: 'Store and retrieve patient-specific files for quick access during care workflows.' },
+        { heading: 'Medical Records', body: 'Manage medical-record attachments linked to clinical history and treatment context.' },
+        { heading: 'Billing Documents', body: 'Keep financial document proofs and bill-linked files organized for compliance.' },
+        { heading: 'Doctor Documents', body: 'Maintain doctor-related credentials and documentation.' },
+        { heading: 'All Documents', body: 'Use global browsing and filtering for cross-category retrieval and administration.' }
+      ]
+    },
+    config: {
+      title: 'Configuration Module',
+      summary: 'Access high-level system configuration guidance and governance details.',
+      sections: [
+        { heading: 'Configuration Overview', body: 'Configuration provides administrators with guidance and context about platform-level setup and operational controls.' }
+      ]
+    },
+    settings: {
+      title: 'Settings Module',
+      summary: 'Control profile, appearance, notifications, and organisation branding.',
+      sections: [
+        { heading: 'General Settings', body: 'Settings includes profile updates, theme preferences, notification options, and organisation details including branding assets.' }
+      ]
+    }
+  };
 
   ngOnInit(): void {
     this.theme = (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
     this.user = this.authSession.getUser() || {};
     this.profilePic = localStorage.getItem('profilePic') || '';
+    this.applyBranding();
     const savedNotifications = localStorage.getItem('notificationSettings');
     if (savedNotifications) {
       this.notificationSettings = this.normalizeNotificationSettings(JSON.parse(savedNotifications));
@@ -896,9 +1026,6 @@ export class HomeComponent implements OnInit {
   }
 
   get showClinicSwitcher(): boolean {
-    if (this.active === 'config-workflows' || this.active === 'config-workflow-builder') {
-      return false;
-    }
     return this.canManageUserAccounts && this.clinicSwitcherOptions.length > 0;
   }
 
@@ -963,7 +1090,8 @@ export class HomeComponent implements OnInit {
       expanded: false,
       children: [
         { key: 'doctor-register', label: 'Register', iconText: 'R' },
-        { key: 'doctor-report', label: 'Report', iconText: 'RP' }
+        { key: 'doctor-report', label: 'Report', iconText: 'RP' },
+        { key: 'doctor-about', label: 'About', iconText: 'i' }
       ]
     },
     { 
@@ -974,7 +1102,8 @@ export class HomeComponent implements OnInit {
       children: [
         { key: 'patients-register', label: 'Register', iconText: 'R' },
         { key: 'patients-create', label: 'Create', iconText: '+' },
-        { key: 'patients-report', label: 'Report', iconText: 'RP' }
+        { key: 'patients-report', label: 'Report', iconText: 'RP' },
+        { key: 'patients-about', label: 'About', iconText: 'i' }
       ]
     },
     {
@@ -985,7 +1114,8 @@ export class HomeComponent implements OnInit {
       children: [
         { key: 'appointment-register', label: 'Calendar', iconText: 'C' },
         { key: 'appointment-all', label: 'All appointments', iconText: 'AA' },
-        { key: 'appointment-report', label: 'Report', iconText: 'RP' }
+        { key: 'appointment-report', label: 'Report', iconText: 'RP' },
+        { key: 'appointment-about', label: 'About', iconText: 'i' }
       ]
     },
     { 
@@ -993,14 +1123,20 @@ export class HomeComponent implements OnInit {
       label: 'Staff', 
       iconText: 'S',
       expanded: false,
-      children: [{ key: 'staff-register', label: 'Register', iconText: 'R' }]
+      children: [
+        { key: 'staff-register', label: 'Register', iconText: 'R' },
+        { key: 'staff-about', label: 'About', iconText: 'i' }
+      ]
     },
     {
       key: 'clinic',
       label: 'Clinic',
       iconText: 'CL',
       expanded: false,
-      children: [{ key: 'clinic-manage', label: 'Manage clinics', iconText: 'M' }]
+      children: [
+        { key: 'clinic-manage', label: 'Manage clinics', iconText: 'M' },
+        { key: 'clinic-about', label: 'About', iconText: 'i' }
+      ]
     },
     { 
       key: 'inventory', 
@@ -1008,8 +1144,12 @@ export class HomeComponent implements OnInit {
       iconText: 'I',
       expanded: false,
       children: [
-        { key: 'inventory-register', label: 'Register', iconText: 'R' },
-        { key: 'inventory-report', label: 'Report', iconText: 'RP' }
+        { key: 'inventory-items', label: 'Items', iconText: 'I' },
+        { key: 'inventory-stock', label: 'Stock (Batches)', iconText: 'S' },
+        { key: 'inventory-report-expiring', label: 'Reports · Expiring', iconText: 'E' },
+        { key: 'inventory-report-expired', label: 'Reports · Expired', iconText: 'X' },
+        { key: 'inventory-report-low', label: 'Reports · Low stock', iconText: 'L' },
+        { key: 'inventory-about', label: 'About', iconText: 'i' }
       ]
     },
     {
@@ -1020,7 +1160,8 @@ export class HomeComponent implements OnInit {
       children: [
         { key: 'maintenance-raise', label: 'Raise Complaint', iconText: '+' },
         { key: 'maintenance-my', label: 'My Complaints', iconText: 'MC' },
-        { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' }
+        { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' },
+        { key: 'maintenance-about', label: 'About', iconText: 'i' }
       ]
     },
     {
@@ -1033,7 +1174,8 @@ export class HomeComponent implements OnInit {
         { key: 'transactions-billing', label: 'Billing', iconText: 'B' },
         { key: 'transactions-payments', label: 'Payments', iconText: 'P' },
         { key: 'transactions-expenses', label: 'Expenses', iconText: 'E' },
-        { key: 'transactions-ledger', label: 'Transactions Log', iconText: 'L' }
+        { key: 'transactions-ledger', label: 'Transactions Log', iconText: 'L' },
+        { key: 'transactions-about', label: 'About', iconText: 'i' }
       ]
     },
     {
@@ -1046,21 +1188,25 @@ export class HomeComponent implements OnInit {
         { key: 'documents-medical', label: 'Medical Records', iconText: 'M' },
         { key: 'documents-billing', label: 'Billing Documents', iconText: 'B' },
         { key: 'documents-doctor', label: 'Doctor Documents', iconText: 'D' },
-        { key: 'documents-all', label: 'All Documents', iconText: 'A' }
+        { key: 'documents-all', label: 'All Documents', iconText: 'A' },
+        { key: 'documents-about', label: 'About', iconText: 'i' }
       ]
     },
-    { key: 'settings', label: 'Settings', iconText: 'ST' }
+    {
+      key: 'settings',
+      label: 'Settings',
+      iconText: 'ST',
+      expanded: false,
+      children: [
+        { key: 'settings', label: 'General', iconText: 'G' },
+        { key: 'settings-about', label: 'About', iconText: 'i' }
+      ]
+    }
   ];
 
   get activeLabel(): string {
     if (this.active === 'maintenance-detail') {
       return 'Complaint details';
-    }
-    if (this.active === 'config-workflows') {
-      return 'Workflows';
-    }
-    if (this.active === 'config-workflow-builder') {
-      return 'Workflow editor';
     }
     const item = this.findItemByKey(this.sidebarItems, this.active);
     return item ? item.label : 'Module';
@@ -1071,18 +1217,61 @@ export class HomeComponent implements OnInit {
   }
 
   get isConfigurationModule(): boolean {
-    return this.active === 'config-workflows' || this.active === 'config-workflow-builder';
+    return false;
   }
 
-  /** Admin workflow builder target; set when opening from the list. */
-  workflowBuilderId: number | null = null;
+  get isAboutPage(): boolean {
+    return this.active.endsWith('-about') || this.active === 'config-about';
+  }
+
+  get activeAboutDoc(): ModuleAboutDoc | null {
+    const key = this.active === 'config-about' ? 'config' : this.active.replace(/-about$/, '');
+    return this.moduleAboutDocs[key] || null;
+  }
+
+  get canUseSpeech(): boolean {
+    return typeof window !== 'undefined' && 'speechSynthesis' in window;
+  }
+
+  readAboutAloud(): void {
+    const doc = this.activeAboutDoc;
+    if (!doc || !this.canUseSpeech) return;
+    const synth = window.speechSynthesis;
+    if (synth.speaking) {
+      synth.cancel();
+      this.isAboutSpeaking = false;
+      return;
+    }
+    const plainSections = doc.sections.map((s) => `${s.heading}. ${s.body}`).join(' ');
+    const utterance = new SpeechSynthesisUtterance(`${doc.title}. ${doc.summary}. ${plainSections}`);
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.onstart = () => (this.isAboutSpeaking = true);
+    utterance.onend = () => (this.isAboutSpeaking = false);
+    utterance.onerror = () => (this.isAboutSpeaking = false);
+    synth.cancel();
+    synth.speak(utterance);
+  }
 
   get isTransactionsModule(): boolean {
     return this.active.startsWith('transactions-');
   }
 
+  get isInventoryModule(): boolean {
+    return (
+      this.active === 'inventory-items' ||
+      this.active === 'inventory-stock' ||
+      this.active.startsWith('inventory-report-')
+    );
+  }
+
   get isDocumentsModule(): boolean {
     return this.active.startsWith('documents-');
+  }
+
+  /** Patient / doctor / bill dropdowns are loaded per clinic; empty while “All clinics” is selected. */
+  get docMgmtDropdownsNeedSingleClinic(): boolean {
+    return this.authSession.isAllClinicsScopeSelected();
   }
 
   /** Flatten sidebar for search: "Parent › Child" and top-level items. */
@@ -1202,7 +1391,7 @@ export class HomeComponent implements OnInit {
 
   isSidebarParentActive(item: SidebarItem): boolean {
     if (item.key === 'configuration') {
-      return this.active === 'config-workflows' || this.active === 'config-workflow-builder';
+      return !!item.children?.some((c) => c.key === this.active);
     }
     return (
       this.active === item.key ||
@@ -1229,7 +1418,9 @@ export class HomeComponent implements OnInit {
     private readonly router: Router,
     private readonly http: HttpClient,
     private readonly sanitizer: DomSanitizer,
-    private readonly toast: ToastService
+    private readonly toast: ToastService,
+    private readonly inventoryApi: InventoryApiService,
+    private readonly billingApi: BillingApiService
   ) {}
 
   toggleSidebar(): void {
@@ -1239,6 +1430,13 @@ export class HomeComponent implements OnInit {
   get canManageUserAccounts(): boolean {
     const r = this.user?.role;
     return r === 'Super Admin' || r === 'Admin';
+  }
+
+  /** Inventory edits (items, add stock). Doctors are view-only here. */
+  get canManageInventory(): boolean {
+    const r = this.user?.role;
+    if (r === 'Doctor') return false;
+    return r === 'Super Admin' || r === 'Admin' || r === 'Staff';
   }
 
   private applyStaffSidebarRestrictions(): void {
@@ -1264,7 +1462,7 @@ export class HomeComponent implements OnInit {
       label: 'Configuration',
       iconText: 'CF',
       expanded: false,
-      children: [{ key: 'config-workflows', label: 'Workflows', iconText: 'WF' }]
+      children: [{ key: 'config-about', label: 'About', iconText: 'i' }]
     };
     if (settingsIdx >= 0) {
       this.sidebarItems.splice(settingsIdx, 0, cfg);
@@ -1273,38 +1471,25 @@ export class HomeComponent implements OnInit {
     }
   }
 
-  openWorkflowBuilder(workflowId: number): void {
-    if (!this.canManageUserAccounts) return;
-    this.workflowBuilderId = workflowId;
-    const cfg = this.sidebarItems.find((i) => i.key === 'configuration');
-    if (cfg) cfg.expanded = true;
-    this.active = 'config-workflow-builder';
-    this.columnFilters = {};
-  }
-
-  backFromWorkflowBuilder(): void {
-    this.active = 'config-workflows';
-    this.columnFilters = {};
-  }
-
   private applyMaintenanceNav(): void {
     const idx = this.sidebarItems.findIndex((i) => i.key === 'maintenance');
     if (idx < 0) return;
     const allChildren: SidebarItem[] = [
       { key: 'maintenance-raise', label: 'Raise Complaint', iconText: '+' },
       { key: 'maintenance-my', label: 'My Complaints', iconText: 'MC' },
-      { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' }
+      { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' },
+      { key: 'maintenance-about', label: 'About', iconText: 'i' }
     ];
     const role = this.user?.role;
     let children: SidebarItem[] = [];
     if (this.canManageUserAccounts) {
-      children = allChildren.filter((c) => c.key === 'maintenance-all');
+      children = allChildren.filter((c) => c.key === 'maintenance-all' || c.key === 'maintenance-about');
     } else if (role === 'Staff') {
       children = allChildren.filter(
-        (c) => c.key === 'maintenance-raise' || c.key === 'maintenance-my'
+        (c) => c.key === 'maintenance-raise' || c.key === 'maintenance-my' || c.key === 'maintenance-about'
       );
     } else if (role === 'Doctor') {
-      children = allChildren.filter((c) => c.key === 'maintenance-my');
+      children = allChildren.filter((c) => c.key === 'maintenance-my' || c.key === 'maintenance-about');
     }
     if (!children.length) {
       this.sidebarItems = this.sidebarItems.filter((i) => i.key !== 'maintenance');
@@ -1375,14 +1560,15 @@ export class HomeComponent implements OnInit {
   }
 
   setActive(key: string): void {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      this.isAboutSpeaking = false;
+    }
     if (
-      (key === 'config-workflows' || key === 'config-workflow-builder') &&
+      key === 'config-about' &&
       !this.canManageUserAccounts
     ) {
       key = 'dashboard';
-    }
-    if (key === 'config-workflow-builder' && this.workflowBuilderId == null) {
-      key = 'config-workflows';
     }
     if (!this.canManageUserAccounts && key.startsWith('clinic-')) {
       key = 'dashboard';
@@ -1413,7 +1599,7 @@ export class HomeComponent implements OnInit {
         m.expanded = true;
       }
     }
-    if (key === 'config-workflows') {
+    if (key === 'config-about') {
       const c = this.sidebarItems.find((i) => i.key === 'configuration');
       if (c) c.expanded = true;
     }
@@ -1485,11 +1671,8 @@ export class HomeComponent implements OnInit {
       this.loadActiveDoctorsForDropdowns();
       this.loadMainDashboard();
     }
-    if (key === 'inventory-register') {
-      this.loadInventoryRegisterPage();
-    }
-    if (key === 'inventory-report') {
-      this.loadInventoryReport();
+    if (key === 'inventory-items' || key === 'inventory-stock' || key.startsWith('inventory-report-')) {
+      /* Child pages load their own data */
     }
     if (key === 'transactions-dashboard') {
       this.loadFinancialDashboard();
@@ -1552,6 +1735,7 @@ export class HomeComponent implements OnInit {
     reader.onload = (e) => {
       const value = e.target?.result as string;
       this.organisation[field] = value;
+      if (field === 'logo') this.applyBranding();
     };
     reader.readAsDataURL(file);
   }
@@ -1566,6 +1750,7 @@ export class HomeComponent implements OnInit {
           this.organisation = { ...this.organisation, ...res.organisation };
         }
         localStorage.setItem('organisation', JSON.stringify(this.organisation));
+        this.applyBranding();
         this.orgSaving = false;
         this.orgSaveMessage = 'Organisation settings saved to backend.';
       },
@@ -2283,9 +2468,6 @@ export class HomeComponent implements OnInit {
     this.loadInventoryMovements(this.movementPagination.page);
     this.loadInventoryItemSelectOptions();
     this.loadInventoryDashboard();
-    if (this.active === 'inventory-report') {
-      this.loadInventoryReport();
-    }
   }
 
   loadStockViewData(): void {
@@ -2461,6 +2643,7 @@ export class HomeComponent implements OnInit {
           /* ignore */
         }
       }
+      this.applyBranding();
       this.orgLoading = false;
       return;
     }
@@ -2471,6 +2654,7 @@ export class HomeComponent implements OnInit {
           this.organisation = { ...this.organisation, ...res.organisation };
           localStorage.setItem('organisation', JSON.stringify(this.organisation));
         }
+        this.applyBranding();
         this.orgLoading = false;
       },
       error: () => {
@@ -2478,9 +2662,29 @@ export class HomeComponent implements OnInit {
         if (savedOrganisation) {
           this.organisation = { ...this.organisation, ...JSON.parse(savedOrganisation) };
         }
+        this.applyBranding();
         this.orgLoading = false;
       }
     });
+  }
+
+  private applyBranding(): void {
+    const title = (this.organisation?.name || '').trim() || this.defaultTabTitle;
+    document.title = title;
+    this.applyFavicon(this.organisation?.logo || this.defaultFaviconPath);
+  }
+
+  private applyFavicon(url: string): void {
+    const head = document.head;
+    if (!head) return;
+    let link = head.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      head.appendChild(link);
+    }
+    link.type = url.startsWith('data:image') ? 'image/png' : 'image/x-icon';
+    link.href = url || this.defaultFaviconPath;
   }
 
   get isRegisterPage(): boolean {
@@ -4429,9 +4633,70 @@ export class HomeComponent implements OnInit {
     this.loadFinancialPatients();
     this.loadFinancialAppointments();
     this.loadBills(1);
+    this.loadBillInventoryItems();
     if (!this.billForm.billDate) {
       this.billForm.billDate = new Date().toISOString().slice(0, 10);
     }
+  }
+
+  private loadBillInventoryItems(): void {
+    this.inventoryApi.listItems({ page: 1, limit: 500 }).subscribe({
+      next: (res) => {
+        this.billInventoryItemOptions = (res.items || [])
+          .filter((i) => i.isActive)
+          .map((i) => ({ id: i.id, name: i.name }));
+      },
+      error: () => (this.billInventoryItemOptions = [])
+    });
+  }
+
+  onBillLineInventoryChange(line: (typeof this.billForm.items)[0]): void {
+    line.stockError = '';
+    line.stockHint = '';
+    line.availableQty = null;
+    if (!line.inventoryItemId) return;
+    this.inventoryApi.getItemAvailability(line.inventoryItemId).subscribe({
+      next: (a) => {
+        line.availableQty = a.available;
+        if (a.hasOnlyExpiredRemaining) {
+          line.stockError = 'Only expired stock remains; cannot sell.';
+          line.stockHint = '';
+        } else if (a.available <= 0) {
+          line.stockError = 'No usable stock available.';
+        } else {
+          line.stockHint =
+            `Available: ${a.available}` +
+            (a.nearestUsableExpiry ? ` · Next expiry ${a.nearestUsableExpiry}` : '') +
+            (a.expiringWithinDays ? ' · Expiring within 7 days' : '');
+        }
+        this.validateBillLineQty(line);
+      },
+      error: () => {
+        line.stockError = 'Could not load stock for this item.';
+      }
+    });
+  }
+
+  validateBillLineQty(line: (typeof this.billForm.items)[0]): void {
+    if (!line.inventoryItemId || line.availableQty == null) return;
+    const q = Math.max(1, Math.floor(Number(line.quantity) || 1));
+    if (q > line.availableQty) {
+      line.stockError = `Quantity exceeds available (${line.availableQty}).`;
+    } else if (line.stockError?.startsWith('Quantity exceeds')) {
+      line.stockError = '';
+    }
+  }
+
+  private emptyBillLine() {
+    return {
+      itemName: '',
+      quantity: 1,
+      price: 0,
+      inventoryItemId: null,
+      availableQty: null,
+      stockHint: '',
+      stockError: ''
+    };
   }
 
   loadBills(page = this.billingPagination.page): void {
@@ -4478,7 +4743,7 @@ export class HomeComponent implements OnInit {
   }
 
   addBillLine(): void {
-    this.billForm.items.push({ itemName: '', quantity: 1, price: 0 });
+    this.billForm.items.push(this.emptyBillLine());
   }
 
   removeBillLine(index: number): void {
@@ -4509,43 +4774,65 @@ export class HomeComponent implements OnInit {
       this.billError = 'Select a patient.';
       return;
     }
-    const items = this.billForm.items
-      .map((it) => ({
-        itemName: it.itemName.trim(),
-        quantity: Math.max(1, Number(it.quantity) || 1),
-        price: Math.max(0, Number(it.price) || 0)
-      }))
-      .filter((it) => it.itemName.length > 0);
-    if (!items.length) {
+    const lines = this.billForm.items.filter((it) => it.itemName.trim().length > 0);
+    if (!lines.length) {
       this.billError = 'Add at least one line item with a name.';
       return;
+    }
+    for (const line of lines) {
+      const itemName = line.itemName.trim();
+      const qty = Math.max(1, Math.floor(Number(line.quantity) || 1));
+      const invId = line.inventoryItemId != null && line.inventoryItemId > 0 ? line.inventoryItemId : null;
+      if (invId) {
+        if (line.stockError && line.stockError.includes('Only expired')) {
+          this.billError = line.stockError;
+          return;
+        }
+        if (line.availableQty != null && qty > line.availableQty) {
+          this.billError = `Line “${itemName}”: quantity exceeds available stock (${line.availableQty}).`;
+          return;
+        }
+        if (line.availableQty === 0 || (line.stockError && line.stockError.includes('No usable'))) {
+          this.billError = `Line “${itemName}”: no usable stock.`;
+          return;
+        }
+      }
     }
     if (!this.requireSingleClinicForCreate()) return;
     this.billSubmitting = true;
     this.billError = '';
-    const body: any = {
+    const body = {
       patientId: this.billForm.patientId,
       appointmentId: this.billForm.appointmentId || null,
       billDate: this.billForm.billDate || new Date().toISOString().slice(0, 10),
       discount: Number(this.billForm.discount) || 0,
-      items
+      items: lines.map((line) => ({
+        itemName: line.itemName.trim(),
+        quantity: Math.max(1, Math.floor(Number(line.quantity) || 1)),
+        price: Math.max(0, Number(line.price) || 0),
+        inventoryItemId:
+          line.inventoryItemId != null && line.inventoryItemId > 0 ? line.inventoryItemId : null
+      }))
     };
-    this.http.post(`${this.financialApiUrl}/bills`, body).subscribe({
+    this.billingApi.createBill(body).subscribe({
       next: () => {
         this.billSubmitting = false;
+        this.toast.success('Bill created and stock updated.');
         this.billForm = {
           patientId: null,
           appointmentId: null,
           billDate: new Date().toISOString().slice(0, 10),
           discount: 0,
-          items: [{ itemName: '', quantity: 1, price: 0 }]
+          items: [this.emptyBillLine()]
         };
         this.loadBills(1);
         this.loadFinancialDashboard();
+        this.loadBillInventoryItems();
       },
       error: (err) => {
         this.billSubmitting = false;
         this.billError = err?.error?.message || 'Could not create bill.';
+        this.toast.error(this.billError);
       }
     });
   }
@@ -4863,41 +5150,72 @@ export class HomeComponent implements OnInit {
     this.loadLedger(target);
   }
 
-  /** Patients / doctors / appointments / bills for document screens */
+  private clearDocReferenceDropdownsAndSelections(): void {
+    this.docPatients = [];
+    this.docDoctors = [];
+    this.docAppointments = [];
+    this.docBillsSelect = [];
+    this.docPatientId = null;
+    this.docMedPatientId = null;
+    this.docMedAppointmentId = null;
+    this.docBillId = null;
+    this.docDoctorId = null;
+    this.docPatientAttachments = [];
+    this.docMedAttachments = [];
+    this.docBillingAttachments = [];
+    this.docDoctorAttachments = [];
+  }
+
+  /** Patients / doctors / appointments / bills for document screens — scoped to the active clinic header. */
   ensureDocReferenceData(): void {
-    if (this.docRefDataLoaded) return;
-    this.docRefDataLoaded = true;
+    const key = this.authSession.getClinicIdHeaderValue() ?? '';
+    if (this.docReferenceDataClinicKey === key) return;
+    this.docReferenceDataClinicKey = key;
+
+    if (this.authSession.isAllClinicsScopeSelected()) {
+      this.clearDocReferenceDropdownsAndSelections();
+      return;
+    }
+
+    const scopeKey = key;
+
     this.http.get<{ patients: PatientRow[] }>(this.patientApiUrl, { params: { page: 1, limit: 500 } }).subscribe({
       next: (res) => {
+        if (this.docReferenceDataClinicKey !== scopeKey) return;
         this.docPatients = (res.patients || []).map((p) => ({
           id: p.id,
           name: p.username || `Patient #${p.id}`
         }));
       },
       error: () => {
+        if (this.docReferenceDataClinicKey !== scopeKey) return;
         this.docPatients = [];
       }
     });
     this.http
       .get<{ doctors: DoctorRow[] }>(this.doctorApiUrl, { params: { page: 1, limit: 500, activeOnly: '1' } })
       .subscribe({
-      next: (res) => {
-        this.docDoctors = (res.doctors || []).map((d) => ({
-          id: d.id,
-          name: d.username || `Doctor #${d.id}`
-        }));
-      },
-      error: () => {
-        this.docDoctors = [];
-      }
-    });
+        next: (res) => {
+          if (this.docReferenceDataClinicKey !== scopeKey) return;
+          this.docDoctors = (res.doctors || []).map((d) => ({
+            id: d.id,
+            name: d.username || `Doctor #${d.id}`
+          }));
+        },
+        error: () => {
+          if (this.docReferenceDataClinicKey !== scopeKey) return;
+          this.docDoctors = [];
+        }
+      });
     this.http
       .get<{ appointments: AppointmentRow[] }>(this.appointmentApiUrl, { params: { page: 1, limit: 800 } })
       .subscribe({
         next: (res) => {
+          if (this.docReferenceDataClinicKey !== scopeKey) return;
           this.docAppointments = res.appointments || [];
         },
         error: () => {
+          if (this.docReferenceDataClinicKey !== scopeKey) return;
           this.docAppointments = [];
         }
       });
@@ -4908,12 +5226,14 @@ export class HomeComponent implements OnInit {
       )
       .subscribe({
         next: (res) => {
+          if (this.docReferenceDataClinicKey !== scopeKey) return;
           this.docBillsSelect = (res.bills || []).map((b) => ({
             id: b.id,
             label: `#${b.id} · ${b.patientName || 'Bill'} · ${b.billDate}`
           }));
         },
         error: () => {
+          if (this.docReferenceDataClinicKey !== scopeKey) return;
           this.docBillsSelect = [];
         }
       });
