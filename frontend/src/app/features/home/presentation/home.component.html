@@ -129,7 +129,7 @@
         <div class="title">
           {{ active === 'dashboard' ? 'Dashboard' : activeLabel }}
         </div>
-        <div class="crumb">Overview</div>
+        <div class="crumb">{{ active === 'dashboard' ? 'Operations snapshot' : 'Overview' }}</div>
       </div>
       <div class="topbar-clinic-wrap" *ngIf="showClinicSwitcher">
         <div class="topbar-clinic">
@@ -151,28 +151,36 @@
     </header>
 
     <section *ngIf="active === 'dashboard'" class="dashboard-v2 main-dashboard">
-      <header class="main-dash-header" @cardStagger>
-        <div>
-          <p class="hero-kicker">Operations overview</p>
-          <h1>Welcome back, {{ user.username || 'Clinic Admin' }}</h1>
-          <p class="hero-sub muted">
-            Unified view of patients, appointments, finances, inventory, and documents. Adjust the period and apply to refresh KPIs and interactive ledger charts from the transaction dataset.
+      <header class="main-dash-hero glass-card" @cardStagger>
+        <div class="main-dash-hero-main">
+          <p class="main-dash-eyebrow">Executive overview</p>
+          <h1 class="main-dash-hero-title">Welcome back, {{ user.username || 'Clinic Admin' }}</h1>
+          <p class="main-dash-hero-lead">
+            Patients, scheduling, ledger performance, inventory risk, and documents in one place. Configure the reporting window below, then apply to refresh all figures.
           </p>
         </div>
-        <div class="main-dash-header-actions">
+        <div class="main-dash-hero-aside">
+          <div class="main-dash-hero-meta" *ngIf="mainDashboardPeriodLabel">
+            <span class="main-dash-meta-label">Reporting window</span>
+            <span class="main-dash-meta-value">{{ mainDashboardPeriodLabel }}</span>
+          </div>
           <button
             type="button"
             class="btn-primary main-dash-refresh"
             (click)="refreshMainDashboard()"
             [disabled]="mainDashboardLoading"
           >
-            <span *ngIf="!mainDashboardLoading">Refresh all</span>
-            <span *ngIf="mainDashboardLoading">Loading…</span>
+            <span *ngIf="!mainDashboardLoading">Refresh data</span>
+            <span *ngIf="mainDashboardLoading">Refreshing…</span>
           </button>
         </div>
       </header>
 
-      <section class="main-dash-filters glass-card" @cardStagger>
+      <section class="main-dash-panel main-dash-filters-panel glass-card" @cardStagger>
+        <div class="main-dash-panel-head">
+          <h2 class="main-dash-panel-title">Filters</h2>
+          <p class="main-dash-panel-desc muted">Ledger date range applies to financial KPIs and charts. Doctor and inventory filters scope appointments and stock alerts.</p>
+        </div>
         <div class="main-dash-filters-grid">
           <div class="form-group">
             <label>Period</label>
@@ -206,78 +214,109 @@
             </select>
           </div>
           <div class="form-group main-dash-filter-actions">
-            <label class="visually-hidden">Apply</label>
+            <label class="visually-hidden">Apply filters</label>
             <button type="button" class="btn-primary" (click)="onMainDashboardFilterApply()" [disabled]="mainDashboardLoading">
-              Apply &amp; reload data
+              Apply filters
             </button>
           </div>
         </div>
-        <p class="muted small" *ngIf="mainDashboardPeriodLabel">Active range: {{ mainDashboardPeriodLabel }}</p>
       </section>
 
-      <div class="main-dash-kpi-row" @cardStagger>
-        <ng-container *ngIf="!mainDashboardLoading">
-          <article class="glass-card main-dash-kpi">
-            <div class="main-dash-kpi-label">Total patients</div>
-            <div class="main-dash-kpi-value">{{ mainDashboardPatientTotal | number }}</div>
-            <div class="main-dash-kpi-sub muted">Registered in the system</div>
-          </article>
-          <article class="glass-card main-dash-kpi accent-appt">
-            <div class="main-dash-kpi-label">Today’s appointments</div>
-            <div class="main-dash-kpi-value">{{ mainDashTodayAppointments.length | number }}</div>
-            <div class="main-dash-kpi-sub muted">{{ mainDashTodayYmd }} · filtered by doctor if selected</div>
-          </article>
-          <article class="glass-card main-dash-kpi accent-income">
-            <div class="main-dash-kpi-label">Total income</div>
-            <div class="main-dash-kpi-value pos">{{ formatMoney(mainDashboardFinance?.totalIncome ?? 0) }}</div>
-            <div class="main-dash-kpi-sub muted">Ledger income in range</div>
-          </article>
-          <article class="glass-card main-dash-kpi accent-expense">
-            <div class="main-dash-kpi-label">Total expenses</div>
-            <div class="main-dash-kpi-value neg">{{ formatMoney(mainDashboardFinance?.totalExpense ?? 0) }}</div>
-            <div class="main-dash-kpi-sub muted">Ledger expenses in range</div>
-          </article>
-          <article class="glass-card main-dash-kpi accent-balance">
-            <div class="main-dash-kpi-label">Current balance</div>
-            <div
-              class="main-dash-kpi-value"
-              [class.pos]="(mainDashboardFinance?.balance ?? 0) >= 0"
-              [class.neg]="(mainDashboardFinance?.balance ?? 0) < 0"
-            >
-              {{ formatMoney(mainDashboardFinance?.balance ?? 0) }}
+      <section class="main-dash-metrics" aria-labelledby="main-dash-kpi-heading" @cardStagger>
+        <div class="main-dash-section-head">
+          <h2 id="main-dash-kpi-heading" class="main-dash-section-title">Key metrics</h2>
+          <p class="main-dash-section-sub muted">Snapshot for the selected ledger period unless noted.</p>
+        </div>
+        <div class="main-dash-kpi-row">
+          <ng-container *ngIf="!mainDashboardLoading">
+            <article class="main-dash-kpi glass-card main-dash-kpi--patients">
+              <div class="main-dash-kpi-top">
+                <span class="main-dash-kpi-ic" aria-hidden="true">P</span>
+                <span class="main-dash-kpi-label">Total patients</span>
+              </div>
+              <div class="main-dash-kpi-value">{{ mainDashboardPatientTotal | number }}</div>
+              <p class="main-dash-kpi-sub muted">Registered in the system</p>
+            </article>
+            <article class="main-dash-kpi glass-card main-dash-kpi--appt">
+              <div class="main-dash-kpi-top">
+                <span class="main-dash-kpi-ic" aria-hidden="true">A</span>
+                <span class="main-dash-kpi-label">Today’s appointments</span>
+              </div>
+              <div class="main-dash-kpi-value">{{ mainDashTodayAppointments.length | number }}</div>
+              <p class="main-dash-kpi-sub muted">{{ mainDashTodayYmd }} · doctor filter if selected</p>
+            </article>
+            <article class="main-dash-kpi glass-card main-dash-kpi--income">
+              <div class="main-dash-kpi-top">
+                <span class="main-dash-kpi-ic" aria-hidden="true">↑</span>
+                <span class="main-dash-kpi-label">Total income</span>
+              </div>
+              <div class="main-dash-kpi-value pos">{{ formatMoney(mainDashboardFinance?.totalIncome ?? 0) }}</div>
+              <p class="main-dash-kpi-sub muted">Ledger income in range</p>
+            </article>
+            <article class="main-dash-kpi glass-card main-dash-kpi--expense">
+              <div class="main-dash-kpi-top">
+                <span class="main-dash-kpi-ic" aria-hidden="true">↓</span>
+                <span class="main-dash-kpi-label">Total expenses</span>
+              </div>
+              <div class="main-dash-kpi-value neg">{{ formatMoney(mainDashboardFinance?.totalExpense ?? 0) }}</div>
+              <p class="main-dash-kpi-sub muted">Ledger expenses in range</p>
+            </article>
+            <article class="main-dash-kpi glass-card main-dash-kpi--balance">
+              <div class="main-dash-kpi-top">
+                <span class="main-dash-kpi-ic" aria-hidden="true">Σ</span>
+                <span class="main-dash-kpi-label">Current balance</span>
+              </div>
+              <div
+                class="main-dash-kpi-value"
+                [class.pos]="(mainDashboardFinance?.balance ?? 0) >= 0"
+                [class.neg]="(mainDashboardFinance?.balance ?? 0) < 0"
+              >
+                {{ formatMoney(mainDashboardFinance?.balance ?? 0) }}
+              </div>
+              <p class="main-dash-kpi-sub muted">Income − expenses (range)</p>
+            </article>
+            <article class="main-dash-kpi glass-card main-dash-kpi--docs">
+              <div class="main-dash-kpi-top">
+                <span class="main-dash-kpi-ic" aria-hidden="true">D</span>
+                <span class="main-dash-kpi-label">Documents</span>
+              </div>
+              <div class="main-dash-kpi-value">{{ mainDashboardDocumentTotal | number }}</div>
+              <p class="main-dash-kpi-sub muted">Files with metadata (all types)</p>
+            </article>
+          </ng-container>
+          <ng-container *ngIf="mainDashboardLoading">
+            <div class="main-dash-kpi glass-card skeleton-kpi" *ngFor="let _ of mainDashboardKpiSkeletonSlots">
+              <div class="skeleton-line w-40"></div>
+              <div class="skeleton-line w-60 lg"></div>
+              <div class="skeleton-line w-80 sm"></div>
             </div>
-            <div class="main-dash-kpi-sub muted">Income − expenses (range)</div>
-          </article>
-          <article class="glass-card main-dash-kpi accent-docs">
-            <div class="main-dash-kpi-label">Documents</div>
-            <div class="main-dash-kpi-value">{{ mainDashboardDocumentTotal | number }}</div>
-            <div class="main-dash-kpi-sub muted">Files with metadata (all types)</div>
-          </article>
-        </ng-container>
-        <ng-container *ngIf="mainDashboardLoading">
-          <div class="glass-card main-dash-kpi skeleton-kpi" *ngFor="let _ of mainDashboardKpiSkeletonSlots">
-            <div class="skeleton-line w-40"></div>
-            <div class="skeleton-line w-60 lg"></div>
-            <div class="skeleton-line w-80 sm"></div>
-          </div>
-        </ng-container>
-      </div>
+          </ng-container>
+        </div>
+      </section>
 
-      <section class="main-dash-charts-grid" @cardStagger>
-        <app-main-dashboard-charts
-          [loading]="mainDashboardLoading"
-          [finance]="mainDashboardFinance"
-          [periodLabel]="mainDashboardPeriodLabel"
-        ></app-main-dashboard-charts>
+      <section class="main-dash-charts-wrap" @cardStagger>
+        <div class="main-dash-section-head">
+          <h2 class="main-dash-section-title">Financial insights</h2>
+          <p class="main-dash-section-sub muted">Interactive charts from the transaction ledger for the reporting window.</p>
+        </div>
+        <div class="main-dash-charts-grid">
+          <app-main-dashboard-charts
+            [loading]="mainDashboardLoading"
+            [finance]="mainDashboardFinance"
+            [periodLabel]="mainDashboardPeriodLabel"
+          ></app-main-dashboard-charts>
+        </div>
       </section>
 
       <section class="main-dash-lower-grid" @cardStagger>
-        <article class="glass-card main-dash-table-card" [class.main-dash-chart-dim]="mainDashboardLoading">
+        <article class="main-dash-panel main-dash-schedule glass-card" [class.main-dash-chart-dim]="mainDashboardLoading">
           <div class="main-dash-chart-head">
-            <h3 class="inventory-section-title" style="margin:0">Today &amp; upcoming</h3>
-            <span class="pill">{{ mainDashUpcomingAppointments.length }} in range (from today)</span>
+            <div>
+              <h3 class="main-dash-panel-title" style="margin:0">Schedule</h3>
+              <p class="muted small main-dash-panel-inline-desc">Today and upcoming visits through the selected end date.</p>
+            </div>
+            <span class="pill pill--soft">{{ mainDashUpcomingAppointments.length }} upcoming (from today)</span>
           </div>
-          <p class="muted small">Today’s slots first; then future dates through the selected end date.</p>
           <div class="table-wrap" *ngIf="!mainDashboardLoading">
             <table class="register-table main-dash-appt-table">
               <thead>
@@ -313,9 +352,11 @@
           <div *ngIf="mainDashboardLoading" class="skeleton-block tall"></div>
         </article>
 
-        <article class="glass-card main-dash-alerts" [class.main-dash-chart-dim]="mainDashboardLoading">
-          <h3 class="inventory-section-title">Inventory alerts</h3>
-          <p class="muted small">Low stock vs min level · batches expiring soon.</p>
+        <article class="main-dash-panel main-dash-alerts glass-card" [class.main-dash-chart-dim]="mainDashboardLoading">
+          <div class="main-dash-panel-head">
+            <h3 class="main-dash-panel-title">Inventory alerts</h3>
+            <p class="muted small main-dash-panel-desc">Low stock versus minimum level · batches nearing expiry.</p>
+          </div>
           <div *ngIf="!mainDashboardLoading">
             <h4 class="main-dash-alert-sub">Low stock</h4>
             <ul class="main-dash-alert-list">
@@ -707,29 +748,6 @@
         </div>
       </div>
     </div>
-
-    <section class="register-page module-about-page" *ngIf="isAboutPage && activeAboutDoc" @cardStagger>
-      <div class="register-header">
-        <h2>{{ activeAboutDoc.title }} — About</h2>
-        <button
-          type="button"
-          class="btn-icon ghost"
-          [disabled]="!canUseSpeech"
-          (click)="readAboutAloud()"
-          [attr.title]="canUseSpeech ? 'Read aloud' : 'Voice not supported in this browser'"
-        >
-          {{ isAboutSpeaking ? 'Stop speaker' : 'Play speaker' }}
-        </button>
-      </div>
-
-      <article class="glass-card module-about-card">
-        <p class="module-about-lead">{{ activeAboutDoc.summary }}</p>
-        <section class="module-about-block" *ngFor="let block of activeAboutDoc.sections">
-          <h3>{{ block.heading }}</h3>
-          <p>{{ block.body }}</p>
-        </section>
-      </article>
-    </section>
 
     <section class="transactions-page" *ngIf="active === 'transactions-dashboard'" @cardStagger>
       <div class="inventory-page-head">

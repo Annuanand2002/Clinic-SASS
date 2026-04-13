@@ -19,12 +19,6 @@ interface SidebarItem {
   expanded?: boolean;
 }
 
-interface ModuleAboutDoc {
-  title: string;
-  summary: string;
-  sections: Array<{ heading: string; body: string }>;
-}
-
 type NotificationSection = 'email' | 'message';
 type NotificationMedium = 'push' | 'email' | 'sms';
 
@@ -856,104 +850,6 @@ export class HomeComponent implements OnInit {
   selectedClinicIdUi: number | typeof SELECTED_CLINIC_ALL | null = null;
 
   readonly SELECTED_CLINIC_ALL = SELECTED_CLINIC_ALL;
-  isAboutSpeaking = false;
-
-  private readonly moduleAboutDocs: Record<string, ModuleAboutDoc> = {
-    doctor: {
-      title: 'Doctor Module',
-      summary: 'Manage doctor records and monitor doctor-wise appointment activity.',
-      sections: [
-        { heading: 'Register', body: 'Use Register to add, edit, search, and maintain doctor profiles including consultation fee and account status.' },
-        { heading: 'Report', body: 'Use Report to review doctor performance and appointment trends by doctor for planning and workload visibility.' }
-      ]
-    },
-    patients: {
-      title: 'Patients Module',
-      summary: 'Handle complete patient lifecycle from registration to reporting.',
-      sections: [
-        { heading: 'Register', body: 'Register lists patients with filters, quick actions, and update tools for demographic and account details.' },
-        { heading: 'Create', body: 'Create opens the patient intake form for adding new patient records with required information.' },
-        { heading: 'Report', body: 'Report provides patient-centered analytics and medical-record related views for follow-up and auditing.' }
-      ]
-    },
-    appointment: {
-      title: 'Appointment Module',
-      summary: 'Schedule, review, and analyze appointments across calendar and reports.',
-      sections: [
-        { heading: 'Calendar', body: 'Calendar is the daily scheduling workspace for creating and updating appointments with doctor, patient, and status.' },
-        { heading: 'All Appointments', body: 'All Appointments provides a broader date-based calendar and list perspective for cross-day operational tracking.' },
-        { heading: 'Report', body: 'Report summarizes appointment data for analysis of attendance, completion patterns, and service demand.' }
-      ]
-    },
-    staff: {
-      title: 'Staff Module',
-      summary: 'Maintain non-doctor team members and their profile information.',
-      sections: [
-        { heading: 'Register', body: 'Register allows admins to add, edit, and monitor staff records and account activity in one place.' }
-      ]
-    },
-    clinic: {
-      title: 'Clinic Module',
-      summary: 'Manage clinic branches and multi-clinic operational setup.',
-      sections: [
-        { heading: 'Manage Clinics', body: 'Manage Clinics lets authorized users create and update clinic branches, then operate data with clinic scope selection.' }
-      ]
-    },
-    inventory: {
-      title: 'Inventory Module',
-      summary: 'Track items, stock batches, expiry risk, and low-stock alerts.',
-      sections: [
-        { heading: 'Items', body: 'Items stores item master data like category, unit, minimum stock, and active status for day-to-day stock operations.' },
-        { heading: 'Stock (Batches)', body: 'Stock handles batch-level inflow, purchase details, remaining quantity, and expiry-aware visibility.' },
-        { heading: 'Reports', body: 'Reports shows expiring, expired, and low-stock views so teams can prevent shortages and wastage.' }
-      ]
-    },
-    maintenance: {
-      title: 'Maintenance Module',
-      summary: 'Raise, follow, and manage operational complaints with full status history.',
-      sections: [
-        { heading: 'Raise Complaint', body: 'Staff can submit new complaints with context and supporting attachments.' },
-        { heading: 'My Complaints', body: 'Users can track their submitted complaints, status updates, and latest responses.' },
-        { heading: 'All Complaints', body: 'Admins can review all complaints, assign actions, update status, and monitor resolution timeline.' }
-      ]
-    },
-    transactions: {
-      title: 'Transactions Module',
-      summary: 'Control billing, payments, expenses, and ledger reporting in one financial workspace.',
-      sections: [
-        { heading: 'Dashboard', body: 'Dashboard presents high-level financial KPIs, charts, and pending values for quick executive review.' },
-        { heading: 'Billing', body: 'Billing creates and manages bills, line items, and patient charge records.' },
-        { heading: 'Payments', body: 'Payments records incoming collections against bills with method and status tracking.' },
-        { heading: 'Expenses', body: 'Expenses captures operational and inventory spend for complete P&L visibility.' },
-        { heading: 'Transactions Log', body: 'Transactions Log combines income and expense entries with filters for audit and reconciliation.' }
-      ]
-    },
-    documents: {
-      title: 'Document Management Module',
-      summary: 'Upload, categorize, and retrieve patient and operational documents.',
-      sections: [
-        { heading: 'Patient Documents', body: 'Store and retrieve patient-specific files for quick access during care workflows.' },
-        { heading: 'Medical Records', body: 'Manage medical-record attachments linked to clinical history and treatment context.' },
-        { heading: 'Billing Documents', body: 'Keep financial document proofs and bill-linked files organized for compliance.' },
-        { heading: 'Doctor Documents', body: 'Maintain doctor-related credentials and documentation.' },
-        { heading: 'All Documents', body: 'Use global browsing and filtering for cross-category retrieval and administration.' }
-      ]
-    },
-    config: {
-      title: 'Configuration Module',
-      summary: 'Access high-level system configuration guidance and governance details.',
-      sections: [
-        { heading: 'Configuration Overview', body: 'Configuration provides administrators with guidance and context about platform-level setup and operational controls.' }
-      ]
-    },
-    settings: {
-      title: 'Settings Module',
-      summary: 'Control profile, appearance, notifications, and organisation branding.',
-      sections: [
-        { heading: 'General Settings', body: 'Settings includes profile updates, theme preferences, notification options, and organisation details including branding assets.' }
-      ]
-    }
-  };
 
   ngOnInit(): void {
     this.theme = (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
@@ -1081,8 +977,7 @@ export class HomeComponent implements OnInit {
       expanded: false,
       children: [
         { key: 'doctor-register', label: 'Register', iconText: 'R' },
-        { key: 'doctor-report', label: 'Report', iconText: 'RP' },
-        { key: 'doctor-about', label: 'About', iconText: 'i' }
+        { key: 'doctor-report', label: 'Report', iconText: 'RP' }
       ]
     },
     { 
@@ -1093,8 +988,7 @@ export class HomeComponent implements OnInit {
       children: [
         { key: 'patients-register', label: 'Register', iconText: 'R' },
         { key: 'patients-create', label: 'Create', iconText: '+' },
-        { key: 'patients-report', label: 'Report', iconText: 'RP' },
-        { key: 'patients-about', label: 'About', iconText: 'i' }
+        { key: 'patients-report', label: 'Report', iconText: 'RP' }
       ]
     },
     {
@@ -1105,8 +999,7 @@ export class HomeComponent implements OnInit {
       children: [
         { key: 'appointment-register', label: 'Calendar', iconText: 'C' },
         { key: 'appointment-all', label: 'All appointments', iconText: 'AA' },
-        { key: 'appointment-report', label: 'Report', iconText: 'RP' },
-        { key: 'appointment-about', label: 'About', iconText: 'i' }
+        { key: 'appointment-report', label: 'Report', iconText: 'RP' }
       ]
     },
     { 
@@ -1115,8 +1008,7 @@ export class HomeComponent implements OnInit {
       iconText: 'S',
       expanded: false,
       children: [
-        { key: 'staff-register', label: 'Register', iconText: 'R' },
-        { key: 'staff-about', label: 'About', iconText: 'i' }
+        { key: 'staff-register', label: 'Register', iconText: 'R' }
       ]
     },
     {
@@ -1125,8 +1017,7 @@ export class HomeComponent implements OnInit {
       iconText: 'CL',
       expanded: false,
       children: [
-        { key: 'clinic-manage', label: 'Manage clinics', iconText: 'M' },
-        { key: 'clinic-about', label: 'About', iconText: 'i' }
+        { key: 'clinic-manage', label: 'Manage clinics', iconText: 'M' }
       ]
     },
     { 
@@ -1139,8 +1030,7 @@ export class HomeComponent implements OnInit {
         { key: 'inventory-stock', label: 'Stock (Batches)', iconText: 'S' },
         { key: 'inventory-report-expiring', label: 'Reports · Expiring', iconText: 'E' },
         { key: 'inventory-report-expired', label: 'Reports · Expired', iconText: 'X' },
-        { key: 'inventory-report-low', label: 'Reports · Low stock', iconText: 'L' },
-        { key: 'inventory-about', label: 'About', iconText: 'i' }
+        { key: 'inventory-report-low', label: 'Reports · Low stock', iconText: 'L' }
       ]
     },
     {
@@ -1151,8 +1041,7 @@ export class HomeComponent implements OnInit {
       children: [
         { key: 'maintenance-raise', label: 'Raise Complaint', iconText: '+' },
         { key: 'maintenance-my', label: 'My Complaints', iconText: 'MC' },
-        { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' },
-        { key: 'maintenance-about', label: 'About', iconText: 'i' }
+        { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' }
       ]
     },
     {
@@ -1165,8 +1054,7 @@ export class HomeComponent implements OnInit {
         { key: 'transactions-billing', label: 'Billing', iconText: 'B' },
         { key: 'transactions-payments', label: 'Payments', iconText: 'P' },
         { key: 'transactions-expenses', label: 'Expenses', iconText: 'E' },
-        { key: 'transactions-ledger', label: 'Transactions Log', iconText: 'L' },
-        { key: 'transactions-about', label: 'About', iconText: 'i' }
+        { key: 'transactions-ledger', label: 'Transactions Log', iconText: 'L' }
       ]
     },
     {
@@ -1179,8 +1067,7 @@ export class HomeComponent implements OnInit {
         { key: 'documents-medical', label: 'Medical Records', iconText: 'M' },
         { key: 'documents-billing', label: 'Billing Documents', iconText: 'B' },
         { key: 'documents-doctor', label: 'Doctor Documents', iconText: 'D' },
-        { key: 'documents-all', label: 'All Documents', iconText: 'A' },
-        { key: 'documents-about', label: 'About', iconText: 'i' }
+        { key: 'documents-all', label: 'All Documents', iconText: 'A' }
       ]
     },
     {
@@ -1189,8 +1076,7 @@ export class HomeComponent implements OnInit {
       iconText: 'ST',
       expanded: false,
       children: [
-        { key: 'settings', label: 'General', iconText: 'G' },
-        { key: 'settings-about', label: 'About', iconText: 'i' }
+        { key: 'settings', label: 'General', iconText: 'G' }
       ]
     }
   ];
@@ -1209,39 +1095,6 @@ export class HomeComponent implements OnInit {
 
   get isConfigurationModule(): boolean {
     return false;
-  }
-
-  get isAboutPage(): boolean {
-    return this.active.endsWith('-about') || this.active === 'config-about';
-  }
-
-  get activeAboutDoc(): ModuleAboutDoc | null {
-    const key = this.active === 'config-about' ? 'config' : this.active.replace(/-about$/, '');
-    return this.moduleAboutDocs[key] || null;
-  }
-
-  get canUseSpeech(): boolean {
-    return typeof window !== 'undefined' && 'speechSynthesis' in window;
-  }
-
-  readAboutAloud(): void {
-    const doc = this.activeAboutDoc;
-    if (!doc || !this.canUseSpeech) return;
-    const synth = window.speechSynthesis;
-    if (synth.speaking) {
-      synth.cancel();
-      this.isAboutSpeaking = false;
-      return;
-    }
-    const plainSections = doc.sections.map((s) => `${s.heading}. ${s.body}`).join(' ');
-    const utterance = new SpeechSynthesisUtterance(`${doc.title}. ${doc.summary}. ${plainSections}`);
-    utterance.rate = 0.95;
-    utterance.pitch = 1;
-    utterance.onstart = () => (this.isAboutSpeaking = true);
-    utterance.onend = () => (this.isAboutSpeaking = false);
-    utterance.onerror = () => (this.isAboutSpeaking = false);
-    synth.cancel();
-    synth.speak(utterance);
   }
 
   get isTransactionsModule(): boolean {
@@ -1324,7 +1177,7 @@ export class HomeComponent implements OnInit {
       }
       const parsed = JSON.parse(raw) as unknown;
       this.sidebarFavoriteKeys = Array.isArray(parsed)
-        ? parsed.filter((k): k is string => typeof k === 'string')
+        ? parsed.filter((k): k is string => typeof k === 'string' && !k.endsWith('-about'))
         : [];
     } catch {
       this.sidebarFavoriteKeys = [];
@@ -1447,19 +1300,18 @@ export class HomeComponent implements OnInit {
     const allChildren: SidebarItem[] = [
       { key: 'maintenance-raise', label: 'Raise Complaint', iconText: '+' },
       { key: 'maintenance-my', label: 'My Complaints', iconText: 'MC' },
-      { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' },
-      { key: 'maintenance-about', label: 'About', iconText: 'i' }
+      { key: 'maintenance-all', label: 'All Complaints', iconText: 'AC' }
     ];
     const role = this.user?.role;
     let children: SidebarItem[] = [];
     if (this.canManageUserAccounts) {
-      children = allChildren.filter((c) => c.key === 'maintenance-all' || c.key === 'maintenance-about');
+      children = allChildren.filter((c) => c.key === 'maintenance-all');
     } else if (role === 'Staff') {
       children = allChildren.filter(
-        (c) => c.key === 'maintenance-raise' || c.key === 'maintenance-my' || c.key === 'maintenance-about'
+        (c) => c.key === 'maintenance-raise' || c.key === 'maintenance-my'
       );
     } else if (role === 'Doctor') {
-      children = allChildren.filter((c) => c.key === 'maintenance-my' || c.key === 'maintenance-about');
+      children = allChildren.filter((c) => c.key === 'maintenance-my');
     }
     if (!children.length) {
       this.sidebarItems = this.sidebarItems.filter((i) => i.key !== 'maintenance');
@@ -1532,7 +1384,9 @@ export class HomeComponent implements OnInit {
   setActive(key: string): void {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      this.isAboutSpeaking = false;
+    }
+    if (key.endsWith('-about') || key === 'config-about') {
+      key = 'dashboard';
     }
     if (!this.canManageUserAccounts && key.startsWith('clinic-')) {
       key = 'dashboard';
