@@ -1,0 +1,12 @@
+<main class="login-wrap">
+  <section class="card">
+    <h1>Sign In</h1>
+    <p>Use your clinic admin account to continue.</p>
+    <label>Email or Username</label>
+    <input [(ngModel)]="usernameOrEmail" type="text" autocomplete="username" />
+    <label>Password</label>
+    <input [(ngModel)]="password" type="password" autocomplete="current-password" />
+    <p class="error" *ngIf="error">{{ error }}</p>
+    <button (click)="submit()" [disabled]="loading">{{ loading ? 'Signing in...' : 'Sign In' }}</button>
+  </section>
+</main>

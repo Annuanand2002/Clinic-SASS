@@ -1,0 +1,25 @@
+<section class="home">
+  <h2>Hi {{ greetingName }}!</h2>
+  <p>Dashboard overview</p>
+
+  <div class="cards" *ngIf="!loading">
+    <article>
+      <h3>Patients</h3>
+      <strong>{{ summary.patients }}</strong>
+    </article>
+    <article>
+      <h3>Appointments</h3>
+      <strong>{{ summary.appointments }}</strong>
+    </article>
+    <article>
+      <h3>Total Income</h3>
+      <strong>{{ summary.totalIncome }}</strong>
+    </article>
+    <article>
+      <h3>Balance</h3>
+      <strong>{{ summary.balance }}</strong>
+    </article>
+  </div>
+
+  <p class="badge">Pending complaints: {{ summary.pendingComplaints }}</p>
+</section>

@@ -1,0 +1,8 @@
+<h2>Inventory</h2>
+<section class="list">
+  <article *ngFor="let row of rows">
+    <strong>{{ row.name || 'Item' }}</strong>
+    <p>{{ row.category || '-' }} / Qty: {{ row.totalQuantity ?? 0 }}</p>
+  </article>
+  <p *ngIf="!rows.length">No inventory items found.</p>
+</section>

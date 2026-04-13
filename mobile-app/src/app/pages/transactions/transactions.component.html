@@ -1,0 +1,8 @@
+<h2>Transactions</h2>
+<section class="list">
+  <article *ngFor="let row of rows">
+    <strong>{{ row.type || '-' }} / {{ row.category || '-' }}</strong>
+    <p>{{ row.date || '-' }} - {{ row.amount ?? 0 }}</p>
+  </article>
+  <p *ngIf="!rows.length">No ledger entries found.</p>
+</section>

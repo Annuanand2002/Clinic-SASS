@@ -980,7 +980,6 @@ export class HomeComponent implements OnInit {
       this.syncSelectedClinicUiFromSession();
       this.applyStaffSidebarRestrictions();
       this.applyMaintenanceNav();
-      this.applyConfigurationNav();
       this.loadSidebarFavorites();
       this.loadOrganisation();
       this.loadActiveDoctorsForDropdowns();
@@ -1390,9 +1389,6 @@ export class HomeComponent implements OnInit {
   }
 
   isSidebarParentActive(item: SidebarItem): boolean {
-    if (item.key === 'configuration') {
-      return !!item.children?.some((c) => c.key === this.active);
-    }
     return (
       this.active === item.key ||
       (!!item.children && item.children.some((c) => c.key === this.active))
@@ -1450,24 +1446,6 @@ export class HomeComponent implements OnInit {
     const tx = this.sidebarItems.find((i) => i.key === 'transactions');
     if (tx?.children?.length) {
       tx.children = tx.children.filter((c) => c.key !== 'transactions-dashboard');
-    }
-  }
-
-  private applyConfigurationNav(): void {
-    if (!this.canManageUserAccounts) return;
-    if (this.sidebarItems.some((i) => i.key === 'configuration')) return;
-    const settingsIdx = this.sidebarItems.findIndex((i) => i.key === 'settings');
-    const cfg: SidebarItem = {
-      key: 'configuration',
-      label: 'Configuration',
-      iconText: 'CF',
-      expanded: false,
-      children: [{ key: 'config-about', label: 'About', iconText: 'i' }]
-    };
-    if (settingsIdx >= 0) {
-      this.sidebarItems.splice(settingsIdx, 0, cfg);
-    } else {
-      this.sidebarItems.push(cfg);
     }
   }
 
@@ -1564,12 +1542,6 @@ export class HomeComponent implements OnInit {
       window.speechSynthesis.cancel();
       this.isAboutSpeaking = false;
     }
-    if (
-      key === 'config-about' &&
-      !this.canManageUserAccounts
-    ) {
-      key = 'dashboard';
-    }
     if (!this.canManageUserAccounts && key.startsWith('clinic-')) {
       key = 'dashboard';
     }
@@ -1598,10 +1570,6 @@ export class HomeComponent implements OnInit {
       if (m) {
         m.expanded = true;
       }
-    }
-    if (key === 'config-about') {
-      const c = this.sidebarItems.find((i) => i.key === 'configuration');
-      if (c) c.expanded = true;
     }
     this.active = key;
     this.columnFilters = {}; // Clear filters when switching pages

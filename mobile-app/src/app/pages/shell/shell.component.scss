@@ -1,0 +1,56 @@
+.mobile-shell {
+  min-height: 100vh;
+  padding-bottom: 64px;
+  background: #f8fafc;
+}
+
+header {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  border-bottom: 1px solid #e5eaf2;
+}
+
+header select {
+  flex: 1;
+  border: 1px solid #d8e0eb;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+header button {
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.content {
+  padding: 12px;
+}
+
+nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: #fff;
+  border-top: 1px solid #e5eaf2;
+}
+
+nav a {
+  text-align: center;
+  padding: 12px 4px;
+  text-decoration: none;
+  color: #64748b;
+  font-size: 13px;
+}
+
+nav a.active {
+  color: #1f4ea8;
+  font-weight: 600;
+}

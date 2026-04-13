@@ -1,0 +1,8 @@
+<h2>Staff</h2>
+<section class="list">
+  <article *ngFor="let row of rows">
+    <strong>{{ row.username || '-' }}</strong>
+    <p>{{ row.staffType || '-' }} / {{ row.department || '-' }}</p>
+  </article>
+  <p *ngIf="!rows.length">No staff found.</p>
+</section>

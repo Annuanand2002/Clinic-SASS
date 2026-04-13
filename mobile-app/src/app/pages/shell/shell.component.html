@@ -1,0 +1,20 @@
+<main class="mobile-shell">
+  <header>
+    <select [ngModel]="clinicSelection" (ngModelChange)="onClinicChange($event)">
+      <option value="all">All Clinics</option>
+      <option *ngFor="let c of auth.clinicOptions" [value]="c.id">{{ c.name }}</option>
+    </select>
+    <button (click)="logout()">Logout</button>
+  </header>
+
+  <section class="content">
+    <router-outlet />
+  </section>
+
+  <nav>
+    <a routerLink="/home" routerLinkActive="active">Home</a>
+    <a routerLink="/transactions" routerLinkActive="active">Transactions</a>
+    <a routerLink="/inventory" routerLinkActive="active">Inventory</a>
+    <a routerLink="/staff" routerLinkActive="active">Staff</a>
+  </nav>
+</main>
