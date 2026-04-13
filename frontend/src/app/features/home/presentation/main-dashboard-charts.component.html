@@ -1,0 +1,103 @@
+<section class="dash-analytics-grid">
+  <!-- Sales overview: income vs expense (donut) -->
+  <article class="dash-chart-card" [class.dash-chart-dim]="loading">
+    <header class="dash-chart-head">
+      <div>
+        <h3 class="dash-chart-title">Sales overview</h3>
+        <p class="dash-chart-sub muted" *ngIf="periodLabel">{{ periodLabel }}</p>
+      </div>
+      <button type="button" class="dash-chart-menu" aria-label="Chart menu">⋯</button>
+    </header>
+    <div *ngIf="loading" class="dash-chart-skeleton skeleton-block tall"></div>
+    <ng-container *ngIf="!loading && finance as fin">
+      <div class="dash-donut-row" *ngIf="fin.totalIncome + fin.totalExpense > 0; else noDonut">
+        <div class="dash-donut-chart">
+          <apx-chart
+            [series]="donutSeries"
+            [chart]="donutChart"
+            [labels]="donutLabels"
+            [colors]="donutColors"
+            [plotOptions]="donutPlotOptions"
+            [dataLabels]="donutDataLabels"
+            [legend]="donutLegend"
+            [tooltip]="donutTooltip"
+            [stroke]="donutStroke"
+          ></apx-chart>
+        </div>
+        <ul class="dash-donut-legend" aria-label="Income and expense">
+          <li>
+            <span class="dot purple"></span>
+            <span class="dash-legend-label">Income</span>
+            <span class="dash-legend-val">{{ formatMoney(fin.totalIncome) }}</span>
+          </li>
+          <li>
+            <span class="dot cyan"></span>
+            <span class="dash-legend-label">Expense</span>
+            <span class="dash-legend-val">{{ formatMoney(fin.totalExpense) }}</span>
+          </li>
+        </ul>
+      </div>
+      <ng-template #noDonut>
+        <p class="muted dash-empty">No ledger totals in this period.</p>
+      </ng-template>
+    </ng-container>
+    <p *ngIf="!loading && !finance" class="muted dash-empty">Financial data unavailable.</p>
+  </article>
+
+  <!-- Revenue updates: monthly income bars -->
+  <article class="dash-chart-card" [class.dash-chart-dim]="loading">
+    <header class="dash-chart-head">
+      <div>
+        <h3 class="dash-chart-title">Revenue updates</h3>
+        <p class="dash-chart-sub muted">Monthly income from the ledger</p>
+      </div>
+      <button type="button" class="dash-chart-menu" aria-label="Chart menu">⋯</button>
+    </header>
+    <div *ngIf="loading" class="dash-chart-skeleton skeleton-block tall"></div>
+    <ng-container *ngIf="!loading && finance && hasChartRows">
+      <apx-chart
+        [series]="barSeries"
+        [chart]="barChart"
+        [plotOptions]="barPlotOptions"
+        [dataLabels]="barDataLabels"
+        [xaxis]="barXaxis"
+        [yaxis]="barYaxis"
+        [grid]="barGrid"
+        [colors]="barColors"
+        [tooltip]="barTooltip"
+        [theme]="barTheme"
+      ></apx-chart>
+    </ng-container>
+    <p *ngIf="!loading && finance && !hasChartRows" class="muted dash-empty">No monthly income in this period.</p>
+    <p *ngIf="!loading && !finance" class="muted dash-empty">Financial data unavailable.</p>
+  </article>
+
+  <!-- Ledger flow: income vs expense over time -->
+  <article class="dash-chart-card" [class.dash-chart-dim]="loading">
+    <header class="dash-chart-head">
+      <div>
+        <h3 class="dash-chart-title">Yearly sales</h3>
+        <p class="dash-chart-sub muted">Income and expense by month (selected range)</p>
+      </div>
+      <button type="button" class="dash-chart-menu" aria-label="Chart menu">⋯</button>
+    </header>
+    <div *ngIf="loading" class="dash-chart-skeleton skeleton-block tall"></div>
+    <ng-container *ngIf="!loading && finance && hasChartRows">
+      <apx-chart
+        [series]="areaSeries"
+        [chart]="areaChart"
+        [stroke]="areaStroke"
+        [fill]="areaFill"
+        [xaxis]="areaXaxis"
+        [yaxis]="areaYaxis"
+        [grid]="areaGrid"
+        [colors]="areaColors"
+        [tooltip]="areaTooltip"
+        [legend]="areaLegend"
+        [markers]="areaMarkers"
+      ></apx-chart>
+    </ng-container>
+    <p *ngIf="!loading && finance && !hasChartRows" class="muted dash-empty">No trend data in this period.</p>
+    <p *ngIf="!loading && !finance" class="muted dash-empty">Financial data unavailable.</p>
+  </article>
+</section>

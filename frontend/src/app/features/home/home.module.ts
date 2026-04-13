@@ -10,6 +10,7 @@ import { ReportTableComponent } from '../../shared/inventory/components/report-t
 import { InventoryItemsPageComponent } from '../../shared/inventory/components/inventory-items-page.component';
 import { InventoryStockPageComponent } from '../../shared/inventory/components/inventory-stock-page.component';
 import { InventoryReportsPageComponent } from '../../shared/inventory/components/inventory-reports-page.component';
+import { MainDashboardChartsComponent } from './presentation/main-dashboard-charts.component';
 
 @NgModule({
   declarations: [
@@ -22,7 +23,7 @@ import { InventoryReportsPageComponent } from '../../shared/inventory/components
     InventoryStockPageComponent,
     InventoryReportsPageComponent
   ],
-  imports: [CommonModule, FormsModule, HomeRoutingModule]
+  imports: [CommonModule, FormsModule, HomeRoutingModule, MainDashboardChartsComponent]
 })
 export class HomeModule {}
 

@@ -24,10 +24,12 @@
               "src/manifest.webmanifest"
             ],
             "styles": [
-              "src/styles.css"
+              "src/styles.css",
+              "node_modules/apexcharts/dist/apexcharts.css"
             ],
             "scripts": [],
             "allowedCommonJsDependencies": [
+              "apexcharts",
               "canvg",
               "core-js",
               "html2canvas",

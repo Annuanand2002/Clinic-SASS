@@ -156,7 +156,7 @@
           <p class="hero-kicker">Operations overview</p>
           <h1>Welcome back, {{ user.username || 'Clinic Admin' }}</h1>
           <p class="hero-sub muted">
-            Unified view of patients, appointments, finances, inventory, and documents. Adjust filters and apply to refresh ledger figures; doctor and inventory category update charts instantly from the loaded dataset.
+            Unified view of patients, appointments, finances, inventory, and documents. Adjust the period and apply to refresh KPIs and interactive ledger charts from the transaction dataset.
           </p>
         </div>
         <div class="main-dash-header-actions">
@@ -203,13 +203,6 @@
             <label>Inventory category</label>
             <select [(ngModel)]="mainDashboardFilters.inventoryCategory">
               <option *ngFor="let c of inventoryCategoryOptions" [ngValue]="c.value">{{ c.label }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Appointment trend</label>
-            <select [(ngModel)]="mainDashboardAppointmentGranularity">
-              <option [ngValue]="'daily'">Daily</option>
-              <option [ngValue]="'weekly'">Weekly</option>
             </select>
           </div>
           <div class="form-group main-dash-filter-actions">
@@ -271,126 +264,11 @@
       </div>
 
       <section class="main-dash-charts-grid" @cardStagger>
-        <article class="glass-card main-dash-chart-wide" [class.main-dash-chart-dim]="mainDashboardLoading">
-          <div class="main-dash-chart-head">
-            <div>
-              <h3 class="inventory-section-title" style="margin:0">Income vs expense</h3>
-              <p class="muted small">Monthly totals from the transaction ledger for the selected range.</p>
-            </div>
-          </div>
-          <div *ngIf="!mainDashboardLoading && mainDashFinanceChartRows.length" class="financial-chart financial-chart-triple main-dash-fin-triple">
-            <div
-              *ngFor="let row of mainDashFinanceChartRows"
-              class="financial-chart-col"
-              [class.financial-chart-col-active]="mainFinDashActiveMonth === row.month"
-              (mouseenter)="showMainFinDashTooltip($event, row)"
-              (mousemove)="moveMainFinDashTooltip($event)"
-              (mouseleave)="hideMainFinDashTooltip()"
-            >
-              <div class="financial-chart-bars triple">
-                <div class="financial-bar income" [style.height.%]="mainDashChartBarPct(row.income)"></div>
-                <div class="financial-bar expense" [style.height.%]="mainDashChartBarPct(row.expense)"></div>
-                <div
-                  class="financial-bar net"
-                  [class.net-pos]="row.net >= 0"
-                  [class.net-neg]="row.net < 0"
-                  [style.height.%]="mainDashChartNetBarPct(row.net)"
-                ></div>
-              </div>
-              <span class="financial-chart-mo">{{ row.month }}</span>
-            </div>
-          </div>
-          <div class="financial-chart-title" *ngIf="!mainDashboardLoading && mainDashFinanceChartRows.length">Net trend</div>
-          <svg
-            viewBox="0 0 520 120"
-            class="financial-line-svg financial-line-svg-interactive"
-            *ngIf="!mainDashboardLoading && mainDashFinanceChartRows.length"
-            aria-label="Net trend"
-          >
-            <polyline class="grid" points="14,100 506,100"></polyline>
-            <polyline class="line net-line" [attr.points]="mainDashFinancialNetPolyline"></polyline>
-            <circle
-              *ngFor="let pt of mainDashFinancialNetPoints"
-              class="net-point"
-              [attr.cx]="pt.x"
-              [attr.cy]="pt.y"
-              r="5"
-              (mouseenter)="showMainNetPointTooltip($event, pt.month, pt.net)"
-              (mousemove)="moveMainFinDashTooltip($event)"
-              (mouseleave)="hideMainFinDashTooltip()"
-            />
-          </svg>
-          <p *ngIf="!mainDashboardLoading && !mainDashFinanceChartRows.length" class="muted" style="padding:16px">No ledger activity in this period.</p>
-          <div *ngIf="mainDashboardLoading" class="main-dash-chart-skeleton">
-            <div class="skeleton-block tall"></div>
-          </div>
-        </article>
-
-        <article class="glass-card main-dash-chart-side" [class.main-dash-chart-dim]="mainDashboardLoading">
-          <h3 class="inventory-section-title">Appointment trend</h3>
-          <p class="muted small">
-            {{ mainDashboardAppointmentGranularity === 'daily' ? 'Count per day' : 'Count per week (Mon start)' }} in range · doctor filter applies.
-          </p>
-          <div class="fin-hbar-list" *ngIf="!mainDashboardLoading">
-            <div class="fin-hbar-row" *ngFor="let row of mainDashAppointmentTrendRows">
-              <span class="fin-hbar-label" [title]="row.label">{{ row.label }}</span>
-              <div class="fin-hbar-track">
-                <span class="fin-hbar-fill report-hbar-a" [style.width.%]="row.pct"></span>
-              </div>
-              <span class="fin-hbar-val">{{ row.count }}</span>
-            </div>
-            <p *ngIf="mainDashAppointmentTrendRows.length === 0" class="muted" style="padding:8px 0">No appointments in this range.</p>
-          </div>
-          <div *ngIf="mainDashboardLoading" class="skeleton-block med"></div>
-        </article>
-
-        <article class="glass-card main-dash-chart-side" [class.main-dash-chart-dim]="mainDashboardLoading">
-          <h3 class="inventory-section-title">Inventory · {{ mainDashboardFilters.inventoryCategory ? 'Items (category)' : 'By category' }}</h3>
-          <p class="muted small">Stock quantity distribution. Category filter narrows low-stock and expiry lists below.</p>
-          <div class="fin-hbar-list" *ngIf="!mainDashboardLoading">
-            <div class="fin-hbar-row" *ngFor="let row of mainDashInventoryCategoryDist">
-              <span class="fin-hbar-label" [title]="row.label">{{ row.label }}</span>
-              <div class="fin-hbar-track">
-                <span class="fin-hbar-fill report-hbar-c" [style.width.%]="row.pct"></span>
-              </div>
-              <span class="fin-hbar-val">{{ row.value }}</span>
-            </div>
-            <p *ngIf="mainDashInventoryCategoryDist.length === 0" class="muted" style="padding:8px 0">No inventory data.</p>
-          </div>
-          <div *ngIf="mainDashboardLoading" class="skeleton-block med"></div>
-        </article>
-
-        <article class="glass-card main-dash-chart-side" [class.main-dash-chart-dim]="mainDashboardLoading">
-          <h3 class="inventory-section-title">Income by payment method</h3>
-          <p class="muted small">From transactions in range (not filtered by doctor).</p>
-          <div class="fin-hbar-list" *ngIf="!mainDashboardLoading && mainDashboardFinance?.incomeByPaymentMethod?.length">
-            <div class="fin-hbar-row" *ngFor="let m of mainDashboardFinance?.incomeByPaymentMethod || []">
-              <span class="fin-hbar-label">{{ formatPaymentMethodLabel(m.method) }}</span>
-              <div class="fin-hbar-track">
-                <span class="fin-hbar-fill income-fill" [style.width.%]="hBarPct(m.amount, mainDashFinancialPaymentMethodMax)"></span>
-              </div>
-              <span class="fin-hbar-val">{{ formatMoney(m.amount) }}</span>
-            </div>
-          </div>
-          <p *ngIf="!mainDashboardLoading && !(mainDashboardFinance?.incomeByPaymentMethod?.length)" class="muted" style="padding:8px 0">No income rows.</p>
-          <div *ngIf="mainDashboardLoading" class="skeleton-block med"></div>
-        </article>
-
-        <article class="glass-card main-dash-chart-side" [class.main-dash-chart-dim]="mainDashboardLoading">
-          <h3 class="inventory-section-title">Expenses by category</h3>
-          <p class="muted small">Expense ledger in range.</p>
-          <div class="fin-hbar-list" *ngIf="!mainDashboardLoading && mainDashboardFinance?.expenseByCategory?.length">
-            <div class="fin-hbar-row" *ngFor="let c of mainDashboardFinance?.expenseByCategory || []">
-              <span class="fin-hbar-label">{{ c.category }}</span>
-              <div class="fin-hbar-track">
-                <span class="fin-hbar-fill expense-fill" [style.width.%]="hBarPct(c.amount, mainDashFinancialCategoryMax)"></span>
-              </div>
-              <span class="fin-hbar-val">{{ formatMoney(c.amount) }}</span>
-            </div>
-          </div>
-          <p *ngIf="!mainDashboardLoading && !(mainDashboardFinance?.expenseByCategory?.length)" class="muted" style="padding:8px 0">No expenses.</p>
-          <div *ngIf="mainDashboardLoading" class="skeleton-block med"></div>
-        </article>
+        <app-main-dashboard-charts
+          [loading]="mainDashboardLoading"
+          [finance]="mainDashboardFinance"
+          [periodLabel]="mainDashboardPeriodLabel"
+        ></app-main-dashboard-charts>
       </section>
 
       <section class="main-dash-lower-grid" @cardStagger>
@@ -459,15 +337,6 @@
           <div *ngIf="mainDashboardLoading" class="skeleton-block tall"></div>
         </article>
       </section>
-
-      <div
-        class="fin-floating-tooltip"
-        *ngIf="mainFinDashTooltip.show"
-        [style.left.px]="mainFinDashTooltip.x"
-        [style.top.px]="mainFinDashTooltip.y"
-      >
-        {{ mainFinDashTooltip.text }}
-      </div>
     </section>
 
     <section class="appointment-page appointment-page--table-only" *ngIf="active === 'appointment-register'" @cardStagger>

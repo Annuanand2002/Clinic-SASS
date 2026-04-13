@@ -588,7 +588,6 @@ export class HomeComponent implements OnInit {
     doctorId: number | null;
     inventoryCategory: '' | InventoryCategory;
   } = { preset: '30d', fromDate: '', toDate: '', doctorId: null, inventoryCategory: '' };
-  mainDashboardAppointmentGranularity: 'daily' | 'weekly' = 'daily';
   mainDashboardFinance: {
     totalIncome: number;
     totalExpense: number;
@@ -616,13 +615,6 @@ export class HomeComponent implements OnInit {
     }>;
     expiringWithinDays: number;
   } | null = null;
-  mainFinDashTooltip: { show: boolean; text: string; x: number; y: number } = {
-    show: false,
-    text: '',
-    x: 0,
-    y: 0
-  };
-  mainFinDashActiveMonth: string | null = null;
   finDashTooltip: { show: boolean; text: string; x: number; y: number } = {
     show: false,
     text: '',
@@ -1811,8 +1803,6 @@ export class HomeComponent implements OnInit {
 
     this.ensureMainDashboardDates();
     this.mainDashboardLoading = true;
-    this.mainFinDashTooltip.show = false;
-    this.mainFinDashActiveMonth = null;
 
     const { fromDate, toDate } = this.mainDashboardFilters;
     const finParams = { fromDate, toDate };
@@ -1933,18 +1923,6 @@ export class HomeComponent implements OnInit {
     fetchPage(1);
   }
 
-  get mainDashAppointmentsInRange(): AppointmentRow[] {
-    const from = this.mainDashboardFilters.fromDate;
-    const to = this.mainDashboardFilters.toDate;
-    const docId = this.mainDashboardFilters.doctorId;
-    return this.mainDashboardAppointmentsRaw.filter((a) => {
-      const ad = String(a.appointmentDate).slice(0, 10);
-      if (ad < from || ad > to) return false;
-      if (docId != null && a.doctorId !== docId) return false;
-      return true;
-    });
-  }
-
   get mainDashTodayYmd(): string {
     return this.toYmdLocal(new Date());
   }
@@ -1979,39 +1957,6 @@ export class HomeComponent implements OnInit {
       .slice(0, 30);
   }
 
-  get mainDashAppointmentTrendRows(): Array<{ label: string; count: number; pct: number }> {
-    const list = this.mainDashAppointmentsInRange;
-    const map = new Map<string, number>();
-    if (this.mainDashboardAppointmentGranularity === 'daily') {
-      for (const a of list) {
-        const k = String(a.appointmentDate).slice(0, 10);
-        map.set(k, (map.get(k) || 0) + 1);
-      }
-    } else {
-      for (const a of list) {
-        const ad = String(a.appointmentDate).slice(0, 10);
-        const wk = this.mainDashWeekKey(ad);
-        map.set(wk, (map.get(wk) || 0) + 1);
-      }
-    }
-    const keys = [...map.keys()].sort();
-    const entries = keys.map((k) => ({ k, c: map.get(k) || 0 }));
-    const max = Math.max(1, ...entries.map((e) => e.c));
-    const cap = 45;
-    const tail = entries.length > cap ? entries.slice(-cap) : entries;
-    return tail.map((e) => ({ label: e.k, count: e.c, pct: Math.round((e.c / max) * 100) }));
-  }
-
-  private mainDashWeekKey(ymd: string): string {
-    const d = new Date(`${ymd.slice(0, 10)}T12:00:00`);
-    if (Number.isNaN(d.getTime())) return ymd;
-    const day = d.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    const mon = new Date(d);
-    mon.setDate(mon.getDate() + diff);
-    return `Week ${this.toYmdLocal(mon)}`;
-  }
-
   get mainDashInventoryLowStockFiltered(): InventorySummaryRow[] {
     const rows = this.mainDashboardInventoryFull?.lowStockItems || [];
     const cat = this.mainDashboardFilters.inventoryCategory;
@@ -2037,137 +1982,10 @@ export class HomeComponent implements OnInit {
     return rows.filter((b) => itemIds.has(b.itemId)).slice(0, 10);
   }
 
-  get mainDashInventoryCategoryDist(): Array<{ label: string; value: number; pct: number }> {
-    const items = this.mainDashboardInventoryFull?.items || [];
-    const catFilter = this.mainDashboardFilters.inventoryCategory;
-    if (catFilter) {
-      const sub = items.filter((i) => i.category === catFilter);
-      const map = new Map<string, number>();
-      for (const i of sub) map.set(i.name, i.totalQuantity);
-      const entries = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
-      const max = Math.max(1, ...entries.map(([, v]) => v));
-      return entries.map(([label, value]) => ({ label, value, pct: Math.round((value / max) * 100) }));
-    }
-    const byCat = new Map<string, number>();
-    for (const i of items) {
-      const k = i.category || 'other';
-      byCat.set(k, (byCat.get(k) || 0) + i.totalQuantity);
-    }
-    const entries = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
-    const max = Math.max(1, ...entries.map(([, v]) => v));
-    return entries.map(([label, value]) => ({ label, value, pct: Math.round((value / max) * 100) }));
-  }
-
-  get mainDashFinanceChartRows(): Array<{ month: string; income: number; expense: number; net: number }> {
-    return this.mainDashboardFinance?.chart || [];
-  }
-
-  get mainDashFinancialChartMax(): number {
-    const ch = this.mainDashFinanceChartRows;
-    let m = 1;
-    for (const row of ch) {
-      const net = Number(row.net);
-      m = Math.max(m, row.income, row.expense, Math.abs(net || 0));
-    }
-    return m;
-  }
-
-  get mainDashFinancialNetBarMax(): number {
-    const ch = this.mainDashFinanceChartRows;
-    let m = 1;
-    for (const row of ch) {
-      m = Math.max(m, Math.abs(Number(row.net) || 0));
-    }
-    return m;
-  }
-
-  mainDashChartBarPct(value: number): number {
-    const m = this.mainDashFinancialChartMax;
-    return m > 0 ? Math.min(100, Math.round((Number(value) / m) * 100)) : 0;
-  }
-
-  mainDashChartNetBarPct(net: number): number {
-    const m = this.mainDashFinancialNetBarMax;
-    return m > 0 ? Math.min(100, Math.round((Math.abs(Number(net)) / m) * 100)) : 0;
-  }
-
-  get mainDashFinancialNetPolyline(): string {
-    const ch = this.mainDashFinanceChartRows;
-    if (!ch.length) return '';
-    const series = ch.map((r) => Number(r.net) || 0);
-    return this.toPolylinePoints(series, 520, 110, 14);
-  }
-
-  get mainDashFinancialNetPoints(): Array<{ x: number; y: number; month: string; net: number }> {
-    const ch = this.mainDashFinanceChartRows;
-    if (!ch.length) return [];
-    const series = ch.map((r) => Number(r.net) || 0);
-    const w = 520;
-    const h = 110;
-    const pad = 14;
-    const max = Math.max(...series, 1);
-    const min = Math.min(...series, 0);
-    const span = Math.max(max - min, 1);
-    const n = series.length;
-    const denom = Math.max(n - 1, 1);
-    return series.map((v, idx) => ({
-      x: pad + (idx * (w - pad * 2)) / denom,
-      y: pad + ((max - v) * (h - pad * 2)) / span,
-      month: ch[idx].month,
-      net: v
-    }));
-  }
-
-  get mainDashFinancialPaymentMethodMax(): number {
-    const rows = this.mainDashboardFinance?.incomeByPaymentMethod || [];
-    let m = 1;
-    for (const r of rows) m = Math.max(m, r.amount);
-    return m;
-  }
-
-  get mainDashFinancialCategoryMax(): number {
-    const rows = this.mainDashboardFinance?.expenseByCategory || [];
-    let m = 1;
-    for (const r of rows) m = Math.max(m, r.amount);
-    return m;
-  }
-
   get mainDashboardPeriodLabel(): string {
     const p = this.mainDashboardFilters;
     if (!p.fromDate || !p.toDate) return '';
     return `${p.fromDate} → ${p.toDate}`;
-  }
-
-  showMainFinDashTooltip(
-    event: MouseEvent,
-    row: { month: string; income: number; expense: number; net: number }
-  ): void {
-    this.mainFinDashActiveMonth = row.month;
-    this.mainFinDashTooltip = {
-      show: true,
-      text: `${row.month} · In ${this.formatMoney(row.income)} · Out ${this.formatMoney(row.expense)} · Net ${this.formatMoney(row.net)}`,
-      x: event.clientX + 14,
-      y: event.clientY + 14
-    };
-  }
-
-  moveMainFinDashTooltip(event: MouseEvent): void {
-    if (!this.mainFinDashTooltip.show) return;
-    this.mainFinDashTooltip = { ...this.mainFinDashTooltip, x: event.clientX + 14, y: event.clientY + 14 };
-  }
-
-  hideMainFinDashTooltip(): void {
-    this.mainFinDashTooltip.show = false;
-    this.mainFinDashActiveMonth = null;
-  }
-
-  showMainNetPointTooltip(event: MouseEvent, month: string, net: number): void {
-    this.mainFinDashTooltip = {
-      show: true,
-      text: `${month} · Net ${this.formatMoney(net)}`,
-      x: event.clientX + 14,
-      y: event.clientY + 14
-    };
   }
 
   private getEmptyInventoryItemForm() {
