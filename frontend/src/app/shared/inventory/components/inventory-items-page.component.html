@@ -5,23 +5,22 @@
       <p class="muted">Track supplies and consumables across all clinics</p>
     </div>
     <div class="inventory-modern-actions">
-      <button *ngIf="canEdit" class="btn-icon ghost" type="button">+ Request Stock</button>
       <button *ngIf="canEdit" class="btn-primary" type="button" (click)="openCreate()">+ Add Item</button>
     </div>
   </header>
 
   <section class="inventory-modern-kpi-row">
-    <article class="inventory-modern-kpi">
+    <article class="inventory-modern-kpi inventory-modern-kpi--total">
       <div class="inventory-modern-kpi-ic">♥</div>
       <div class="inventory-modern-kpi-value">{{ totalItemsCount }}</div>
       <div class="inventory-modern-kpi-label">Total Items</div>
     </article>
-    <article class="inventory-modern-kpi warning">
+    <article class="inventory-modern-kpi inventory-modern-kpi--low">
       <div class="inventory-modern-kpi-ic">⚠</div>
       <div class="inventory-modern-kpi-value">{{ lowStockAlertCount }}</div>
       <div class="inventory-modern-kpi-label">Low Stock Alerts</div>
     </article>
-    <article class="inventory-modern-kpi info">
+    <article class="inventory-modern-kpi inventory-modern-kpi--pending">
       <div class="inventory-modern-kpi-ic">≡</div>
       <div class="inventory-modern-kpi-value">{{ pendingOrdersCount }}</div>
       <div class="inventory-modern-kpi-label">Pending Orders</div>
@@ -113,8 +112,11 @@
   </article>
 
   <div class="modal-backdrop" *ngIf="formOpen" (click)="closeForm()"></div>
-  <div class="modal-panel" *ngIf="formOpen">
-    <h3>{{ editingId != null ? 'Edit item' : 'New item' }}</h3>
+  <div class="modal-panel inventory-item-modal" *ngIf="formOpen">
+    <div class="inventory-item-modal-head">
+      <h3>{{ editingId != null ? 'Edit item' : 'Add item' }}</h3>
+      <p class="muted">Update core inventory details used across stock, billing, and reports.</p>
+    </div>
     <div class="settings-grid">
       <div class="form-group full-width">
         <label>Name</label>
@@ -153,7 +155,7 @@
       </div>
     </div>
     <p *ngIf="formError" class="save-error">{{ formError }}</p>
-    <div class="modal-actions">
+    <div class="modal-actions inventory-item-modal-actions">
       <button type="button" class="btn-icon ghost" (click)="closeForm()">Cancel</button>
       <button type="button" class="btn-primary" [disabled]="submitting" (click)="save()">
         {{ submitting ? 'Saving…' : 'Save' }}

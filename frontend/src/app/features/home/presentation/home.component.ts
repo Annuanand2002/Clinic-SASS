@@ -15,6 +15,7 @@ interface SidebarItem {
   key: string;
   label: string;
   iconText: string;
+  badgeCount?: number;
   children?: SidebarItem[];
   expanded?: boolean;
 }
@@ -267,7 +268,7 @@ export class HomeComponent implements OnInit {
   theme: 'light' | 'dark' = 'light';
   user: any = {};
   profilePic: string = '';
-  activeSettingsTab: 'profile' | 'appearance' | 'notifications' | 'organisation' = 'profile';
+  activeSettingsTab: 'profile' | 'notifications' | 'organisation' = 'profile';
   notificationSettings = {
     email: { push: true, email: false, sms: false },
     message: { push: true, email: false, sms: false }
@@ -627,6 +628,8 @@ export class HomeComponent implements OnInit {
     }>;
     expiringWithinDays: number;
   } | null = null;
+  dashboardCalendarMonth = '';
+  dashboardCalendarSelectedDate: string | null = null;
   finDashTooltip: { show: boolean; text: string; x: number; y: number } = {
     show: false,
     text: '',
@@ -861,6 +864,7 @@ export class HomeComponent implements OnInit {
 
   /** Submodule keys (e.g. `doctor-register`), most recent first. Persisted per user. */
   sidebarFavoriteKeys: string[] = [];
+  inventorySidebarAlertCount = 0;
 
   /** Appointment analytics (report page) */
   reportAnalyticsAppointments: AppointmentRow[] = [];
@@ -899,6 +903,7 @@ export class HomeComponent implements OnInit {
       this.loadActiveDoctorsForDropdowns();
       this.applyMainDashboardPreset('30d');
       this.loadMainDashboard();
+      this.loadInventorySidebarAlerts();
     };
 
     if (!token) {
@@ -991,6 +996,7 @@ export class HomeComponent implements OnInit {
       this.selectedClinicIdUi = SELECTED_CLINIC_ALL;
       this.registerPage = 1;
       this.loadDataForActiveKey(this.active);
+      this.loadInventorySidebarAlerts();
       this.toast.success('Showing all clinics (combined view)');
       return;
     }
@@ -1000,6 +1006,7 @@ export class HomeComponent implements OnInit {
     this.selectedClinicIdUi = n;
     this.registerPage = 1;
     this.loadDataForActiveKey(this.active);
+    this.loadInventorySidebarAlerts();
     this.toast.success('Active clinic updated');
   }
 
@@ -1581,6 +1588,28 @@ export class HomeComponent implements OnInit {
     item.expanded = !item.expanded;
   }
 
+  getSidebarBadgeCount(item: SidebarItem): number {
+    if (item.key === 'inventory') return this.inventorySidebarAlertCount;
+    return item.badgeCount ?? 0;
+  }
+
+  private loadInventorySidebarAlerts(): void {
+    forkJoin({
+      expiring: this.inventoryApi.listBatchesReport({ mode: 'expiring' }).pipe(catchError(() => of({ batches: [] }))),
+      expired: this.inventoryApi.listBatchesReport({ mode: 'expired' }).pipe(catchError(() => of({ batches: [] })))
+    }).subscribe({
+      next: ({ expiring, expired }) => {
+        const itemIds = new Set<number>();
+        for (const b of expiring?.batches || []) itemIds.add(Number(b.itemId));
+        for (const b of expired?.batches || []) itemIds.add(Number(b.itemId));
+        this.inventorySidebarAlertCount = itemIds.size;
+      },
+      error: () => {
+        this.inventorySidebarAlertCount = 0;
+      }
+    });
+  }
+
   toggleTheme(): void {
     this.theme = this.theme === 'light' ? 'dark' : 'light';
     localStorage.setItem('theme', this.theme);
@@ -1635,7 +1664,7 @@ export class HomeComponent implements OnInit {
     this.setActive('settings');
   }
 
-  setSettingsTab(tab: 'profile' | 'appearance' | 'notifications' | 'organisation'): void {
+  setSettingsTab(tab: 'profile' | 'notifications' | 'organisation'): void {
     this.activeSettingsTab = tab;
   }
 
@@ -1907,6 +1936,114 @@ export class HomeComponent implements OnInit {
         return c !== 0 ? c : String(a.startTime).localeCompare(String(b.startTime));
       })
       .slice(0, 30);
+  }
+
+  get mainDashCalendarAppointments(): AppointmentRow[] {
+    const docId = this.mainDashboardFilters.doctorId;
+    return this.mainDashboardAppointmentsRaw.filter((a) => {
+      if (!a.appointmentDate) return false;
+      if (docId != null && Number(a.doctorId) !== Number(docId)) return false;
+      return true;
+    });
+  }
+
+  ensureDashboardCalendarMonth(): void {
+    if (!this.dashboardCalendarMonth) {
+      this.dashboardCalendarMonth = this.formatYearMonth(new Date());
+      this.dashboardCalendarSelectedDate = this.mainDashTodayYmd;
+    }
+  }
+
+  shiftDashboardCalendarMonth(delta: number): void {
+    this.ensureDashboardCalendarMonth();
+    const [ys, ms] = this.dashboardCalendarMonth.split('-').map(Number);
+    const d = new Date(ys, ms - 1 + delta, 1);
+    this.dashboardCalendarMonth = this.formatYearMonth(d);
+    const firstDate = `${this.dashboardCalendarMonth}-01`;
+    this.dashboardCalendarSelectedDate = this.dashboardCalendarSelectedDate?.startsWith(this.dashboardCalendarMonth)
+      ? this.dashboardCalendarSelectedDate
+      : firstDate;
+  }
+
+  get dashboardCalendarTitle(): string {
+    this.ensureDashboardCalendarMonth();
+    const [y, m] = this.dashboardCalendarMonth.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+
+  get dashboardCalendarWeekdayLabels(): string[] {
+    return this.allCalendarWeekdayLabels;
+  }
+
+  get dashboardCalendarWeeks(): Array<Array<{ date: string; inMonth: boolean; count: number; isToday: boolean; isSelected: boolean }>> {
+    this.ensureDashboardCalendarMonth();
+    const ym = this.dashboardCalendarMonth;
+    const [y, m] = ym.split('-').map(Number);
+    if (!y || !m) return [];
+
+    const counts = new Map<string, number>();
+    for (const row of this.mainDashCalendarAppointments) {
+      const key = String(row.appointmentDate || '').slice(0, 10);
+      if (!key.startsWith(ym)) continue;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+
+    const first = new Date(y, m - 1, 1);
+    const lastDay = new Date(y, m, 0).getDate();
+    const startPad = first.getDay();
+    const cells: Array<{ date: string; inMonth: boolean; count: number; isToday: boolean; isSelected: boolean }> = [];
+    const prevMonthDate = new Date(y, m - 1, 0);
+    const prevMonthLastDay = prevMonthDate.getDate();
+    const prevMonthYm = this.formatYearMonth(prevMonthDate);
+    const nextMonthYm = this.formatYearMonth(new Date(y, m, 1));
+
+    for (let i = 0; i < startPad; i += 1) {
+      const day = prevMonthLastDay - startPad + 1 + i;
+      const date = `${prevMonthYm}-${String(day).padStart(2, '0')}`;
+      cells.push({
+        date,
+        inMonth: false,
+        count: 0,
+        isToday: date === this.mainDashTodayYmd,
+        isSelected: date === this.dashboardCalendarSelectedDate
+      });
+    }
+    for (let d = 1; d <= lastDay; d += 1) {
+      const date = `${ym}-${String(d).padStart(2, '0')}`;
+      cells.push({
+        date,
+        inMonth: true,
+        count: counts.get(date) || 0,
+        isToday: date === this.mainDashTodayYmd,
+        isSelected: date === this.dashboardCalendarSelectedDate
+      });
+    }
+    let trailingDay = 1;
+    while (cells.length % 7 !== 0) {
+      const date = `${nextMonthYm}-${String(trailingDay).padStart(2, '0')}`;
+      cells.push({
+        date,
+        inMonth: false,
+        count: 0,
+        isToday: date === this.mainDashTodayYmd,
+        isSelected: date === this.dashboardCalendarSelectedDate
+      });
+      trailingDay += 1;
+    }
+
+    const weeks: Array<Array<{ date: string; inMonth: boolean; count: number; isToday: boolean; isSelected: boolean }>> = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7));
+    }
+    return weeks;
+  }
+
+  selectDashboardCalendarDate(date: string, inMonth: boolean): void {
+    if (!date) return;
+    if (!inMonth) {
+      this.dashboardCalendarMonth = String(date).slice(0, 7);
+    }
+    this.dashboardCalendarSelectedDate = date;
   }
 
   get mainDashInventoryLowStockFiltered(): InventorySummaryRow[] {

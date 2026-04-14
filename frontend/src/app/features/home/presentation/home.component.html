@@ -109,6 +109,7 @@
         >
           <span class="nav-ic" aria-hidden="true">{{ item.iconText }}</span>
           <span class="nav-text" *ngIf="!sidebarCollapsed">{{ item.label }}</span>
+          <span class="nav-alert-badge" *ngIf="!sidebarCollapsed && getSidebarBadgeCount(item) > 0">{{ getSidebarBadgeCount(item) }}</span>
           <span class="expand-ic" *ngIf="item.children && !sidebarCollapsed">{{ item.expanded ? '▼' : '▶' }}</span>
         </button>
         <ng-container *ngIf="item.children && item.expanded">
@@ -190,9 +191,6 @@
         <div class="main-dash-hero-main">
           <p class="main-dash-eyebrow">Executive overview</p>
           <h1 class="main-dash-hero-title">Welcome back, {{ user.username || 'Clinic Admin' }}</h1>
-          <p class="main-dash-hero-lead">
-            Patients, scheduling, ledger performance, inventory risk, and documents in one place. Configure the reporting window below, then apply to refresh all figures.
-          </p>
         </div>
         <div class="main-dash-hero-aside">
           <div class="main-dash-hero-meta" *ngIf="mainDashboardPeriodLabel">
@@ -345,44 +343,41 @@
 
       <section class="main-dash-lower-grid" @cardStagger>
         <article class="main-dash-panel main-dash-schedule glass-card" [class.main-dash-chart-dim]="mainDashboardLoading">
-          <div class="main-dash-chart-head">
+          <div class="main-dash-chart-head main-dash-calendar-head">
             <div>
-              <h3 class="main-dash-panel-title" style="margin:0">Schedule</h3>
-              <p class="muted small main-dash-panel-inline-desc">Today and upcoming visits through the selected end date.</p>
+              <h3 class="main-dash-panel-title" style="margin:0">Monthly appointments</h3>
+              <p class="muted small main-dash-panel-inline-desc">Calendar view for the selected doctor filter.</p>
             </div>
-            <span class="pill pill--soft">{{ mainDashUpcomingAppointments.length }} upcoming (from today)</span>
+            <div class="main-dash-calendar-nav">
+              <button type="button" class="main-dash-calendar-nav-btn" (click)="shiftDashboardCalendarMonth(-1)" aria-label="Previous month">
+                ‹
+              </button>
+              <span class="main-dash-calendar-title">{{ dashboardCalendarTitle }}</span>
+              <button type="button" class="main-dash-calendar-nav-btn" (click)="shiftDashboardCalendarMonth(1)" aria-label="Next month">
+                ›
+              </button>
+            </div>
           </div>
-          <div class="table-wrap" *ngIf="!mainDashboardLoading">
-            <table class="register-table main-dash-appt-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Patient</th>
-                  <th>Doctor</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let a of mainDashTodayAppointments">
-                  <td>{{ a.appointmentDate }} <span class="pill inline-pill">Today</span></td>
-                  <td>{{ a.startTime }} – {{ a.endTime }}</td>
-                  <td>{{ a.patientName }}</td>
-                  <td>{{ a.doctorName }}</td>
-                  <td>{{ a.status }}</td>
-                </tr>
-                <tr *ngFor="let a of mainDashUpcomingAppointments">
-                  <td>{{ a.appointmentDate }}</td>
-                  <td>{{ a.startTime }} – {{ a.endTime }}</td>
-                  <td>{{ a.patientName }}</td>
-                  <td>{{ a.doctorName }}</td>
-                  <td>{{ a.status }}</td>
-                </tr>
-                <tr *ngIf="mainDashTodayAppointments.length === 0 && mainDashUpcomingAppointments.length === 0">
-                  <td colspan="5" class="muted" style="text-align:center; padding:20px;">No upcoming appointments in this view.</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="main-dash-calendar" *ngIf="!mainDashboardLoading">
+            <div class="main-dash-calendar-weekdays">
+              <span class="main-dash-calendar-weekday" *ngFor="let wd of dashboardCalendarWeekdayLabels">{{ wd.slice(0, 2) }}</span>
+            </div>
+            <div class="main-dash-calendar-grid">
+              <ng-container *ngFor="let week of dashboardCalendarWeeks">
+                <button
+                  type="button"
+                  class="main-dash-calendar-cell"
+                  *ngFor="let cell of week"
+                  [class.main-dash-calendar-cell--muted]="!cell.inMonth"
+                  [class.main-dash-calendar-cell--today]="cell.isToday"
+                  [class.main-dash-calendar-cell--selected]="cell.isSelected"
+                  (click)="selectDashboardCalendarDate(cell.date, cell.inMonth)"
+                >
+                  <span class="main-dash-calendar-day">{{ cell.date | slice:8:10 }}</span>
+                  <span class="main-dash-calendar-dot" *ngIf="cell.count > 0" [attr.aria-label]="cell.count + ' appointments'"></span>
+                </button>
+              </ng-container>
+            </div>
           </div>
           <div *ngIf="mainDashboardLoading" class="skeleton-block tall"></div>
         </article>
@@ -3348,7 +3343,6 @@
 
         <div class="settings-tabs">
           <button class="tab" [class.active]="activeSettingsTab === 'profile'" (click)="setSettingsTab('profile')">Profile</button>
-          <button class="tab" [class.active]="activeSettingsTab === 'appearance'" (click)="setSettingsTab('appearance')">Appearance</button>
           <button class="tab" [class.active]="activeSettingsTab === 'notifications'" (click)="setSettingsTab('notifications')">Notifications</button>
           <button class="tab" [class.active]="activeSettingsTab === 'organisation'" (click)="setSettingsTab('organisation')">Organisation</button>
         </div>
@@ -3365,20 +3359,6 @@
               <input type="email" [(ngModel)]="user.email" placeholder="Enter email" />
             </div>
             <button class="btn-primary" (click)="saveUser()">Save Changes</button>
-          </div>
-        </div>
-
-        <div *ngIf="activeSettingsTab === 'appearance'" class="settings-grid">
-          <div class="setting-card">
-            <h3>Appearance</h3>
-            <div class="theme-setting">
-              <span>Theme</span>
-              <div class="toggle-switch">
-                <input type="checkbox" id="theme-toggle" [checked]="theme === 'dark'" (change)="toggleTheme()" />
-                <label for="theme-toggle" class="toggle-slider"></label>
-              </div>
-              <span class="theme-label">{{ theme === 'light' ? 'Light' : 'Dark' }}</span>
-            </div>
           </div>
         </div>
 
