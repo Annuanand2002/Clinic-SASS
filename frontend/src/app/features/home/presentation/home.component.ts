@@ -77,6 +77,8 @@ interface ClinicRow {
   email: string;
   organizationId: number | null;
   createdAt: string | null;
+  doctorCount?: number;
+  patientCount?: number;
 }
 
 interface PatientRow {
@@ -327,6 +329,8 @@ export class HomeComponent implements OnInit {
   orgSaveMessage = '';
   orgSaveError = '';
   doctorRows: DoctorRow[] = [];
+  doctorRegisterSelectedId: number | null = null;
+  patientRegisterSelectedId: number | null = null;
   /** Doctors with `users.is_active = 1` for selects (dashboard, appointments, reports, documents). */
   activeDoctorRows: DoctorRow[] = [];
   doctorFormOpen = false;
@@ -384,6 +388,20 @@ export class HomeComponent implements OnInit {
     email: string;
   } = this.getEmptyClinicForm();
   patientRows: PatientRow[] = [];
+  patientDetailRow: PatientRow | null = null;
+  patientDetailLoading = false;
+  patientDetailError = '';
+  patientDetailAppointments: AppointmentRow[] = [];
+  patientDetailBills: Array<{
+    id: number;
+    patientName: string;
+    finalAmount: number;
+    paidAmount: number;
+    status: string;
+    billDate: string;
+  }> = [];
+  patientDetailDocuments: AttachmentMetaRow[] = [];
+  patientDetailTab: 'history' | 'plan' | 'documents' | 'billing' | 'xrays' = 'history';
   patientFormOpen = false;
   patientSubmitting = false;
   editingPatientId: number | null = null;
@@ -752,6 +770,13 @@ export class HomeComponent implements OnInit {
   private docReferenceDataClinicKey: string | null = null;
 
   docPatientSearch = '';
+  docPatientDocumentSearch = '';
+  docPatientCategoryFilter: 'all' | 'prescriptions' | 'xrays' | 'labs' | 'consents' | 'plans' = 'all';
+  docPatientUploadExpanded = false;
+  headerSearchQuery = '';
+  zoomPercent = 93;
+  readonly minZoomPercent = 80;
+  readonly maxZoomPercent = 110;
   docPatientId: number | null = null;
   docPatientAttachments: AttachmentMetaRow[] = [];
   docPatientLoading = false;
@@ -855,6 +880,7 @@ export class HomeComponent implements OnInit {
     this.theme = (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
     this.user = this.authSession.getUser() || {};
     this.profilePic = localStorage.getItem('profilePic') || '';
+    this.initZoom();
     this.applyBranding();
     const savedNotifications = localStorage.getItem('notificationSettings');
     if (savedNotifications) {
@@ -920,6 +946,15 @@ export class HomeComponent implements OnInit {
     return this.authSession.isAllClinicsScopeSelected();
   }
 
+  get selectedClinicLabel(): string {
+    const selected = this.selectedClinicIdUi;
+    if (selected === SELECTED_CLINIC_ALL) return 'All clinics';
+    const n = typeof selected === 'string' ? Number(selected) : selected;
+    if (!Number.isFinite(n as number)) return '';
+    const found = this.clinicSwitcherOptions.find((c) => c.id === n);
+    return found?.name || '';
+  }
+
   /** Shown under the switcher when “All clinics” is selected. */
   get clinicAllScopeSummary(): string {
     const list = this.clinicSwitcherOptions;
@@ -966,6 +1001,14 @@ export class HomeComponent implements OnInit {
     this.registerPage = 1;
     this.loadDataForActiveKey(this.active);
     this.toast.success('Active clinic updated');
+  }
+
+  getSidebarSectionLabel(key: string | undefined): string {
+    if (!key) return '';
+    if (key === 'dashboard') return 'Overview';
+    if (['doctor', 'patients', 'appointment', 'clinic', 'inventory', 'staff'].includes(key)) return 'Clinical';
+    if (['maintenance', 'transactions', 'documents'].includes(key)) return 'Operations';
+    return 'System';
   }
 
   sidebarItems: SidebarItem[] = [
@@ -1084,6 +1127,9 @@ export class HomeComponent implements OnInit {
   get activeLabel(): string {
     if (this.active === 'maintenance-detail') {
       return 'Complaint details';
+    }
+    if (this.active === 'patients-detail') {
+      return 'Patient details';
     }
     const item = this.findItemByKey(this.sidebarItems, this.active);
     return item ? item.label : 'Module';
@@ -1430,6 +1476,9 @@ export class HomeComponent implements OnInit {
     if (key === 'patients-register') {
       this.loadPatients(1, this.registerPageSize);
     }
+    if (key === 'patients-detail' && this.patientDetailRow?.id) {
+      this.loadPatientDetailData(this.patientDetailRow.id);
+    }
     if (key === 'staff-register') {
       this.loadStaff(1, this.registerPageSize);
     }
@@ -1535,6 +1584,55 @@ export class HomeComponent implements OnInit {
   toggleTheme(): void {
     this.theme = this.theme === 'light' ? 'dark' : 'light';
     localStorage.setItem('theme', this.theme);
+  }
+
+  private initZoom(): void {
+    const raw = Number(localStorage.getItem('app_zoom_pct') || 93);
+    const safe = Number.isFinite(raw) ? Math.max(this.minZoomPercent, Math.min(this.maxZoomPercent, raw)) : 93;
+    this.applyZoom(safe);
+  }
+
+  private applyZoom(value: number): void {
+    const clamped = Math.max(this.minZoomPercent, Math.min(this.maxZoomPercent, Math.round(value)));
+    this.zoomPercent = clamped;
+    if (typeof document !== 'undefined') {
+      document.body.style.setProperty('zoom', `${clamped}%`);
+    }
+    localStorage.setItem('app_zoom_pct', String(clamped));
+  }
+
+  increaseZoom(): void {
+    this.applyZoom(this.zoomPercent + 5);
+  }
+
+  decreaseZoom(): void {
+    this.applyZoom(this.zoomPercent - 5);
+  }
+
+  resetZoom(): void {
+    this.applyZoom(93);
+  }
+
+  get headerProfileInitials(): string {
+    const raw = String(this.user?.username || this.user?.email || 'DR').trim();
+    if (!raw) return 'DR';
+    const parts = raw.split(/[\s._-]+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return raw.slice(0, 2).toUpperCase();
+  }
+
+  onHeaderSearchSubmit(): void {
+    const q = this.headerSearchQuery.trim().toLowerCase();
+    if (!q) return;
+    const tokens = q.split(/[\s.,]+/).filter(Boolean);
+    const hit = this.sidebarNavFlat.find((e) => tokens.every((t) => e.searchText.includes(t)));
+    if (!hit) return;
+    this.setActive(hit.key);
+    this.headerSearchQuery = '';
+  }
+
+  openSettingsFromHeader(): void {
+    this.setActive('settings');
   }
 
   setSettingsTab(tab: 'profile' | 'appearance' | 'notifications' | 'organisation'): void {
@@ -2412,6 +2510,176 @@ export class HomeComponent implements OnInit {
     return this.filteredRegisterRows.slice(start, start + this.registerPageSize);
   }
 
+  get selectedDoctorRegisterRow(): DoctorRow | null {
+    const rows = this.doctorRows || [];
+    if (!rows.length) return null;
+    if (this.doctorRegisterSelectedId == null) return rows[0];
+    return rows.find((row) => Number(row.id) === this.doctorRegisterSelectedId) || rows[0];
+  }
+
+  selectDoctorRegister(row: Record<string, any>): void {
+    const id = Number(row?.['id']);
+    this.doctorRegisterSelectedId = Number.isFinite(id) ? id : null;
+  }
+
+  private ensureDoctorRegisterSelection(): void {
+    if (!this.doctorRows.length) {
+      this.doctorRegisterSelectedId = null;
+      return;
+    }
+    const selectedStillVisible = this.doctorRows.some((row) => Number(row.id) === this.doctorRegisterSelectedId);
+    if (!selectedStillVisible) {
+      this.doctorRegisterSelectedId = Number(this.doctorRows[0].id);
+    }
+  }
+
+  get selectedPatientRegisterRow(): PatientRow | null {
+    const rows = this.patientRows || [];
+    if (!rows.length) return null;
+    if (this.patientRegisterSelectedId == null) return rows[0];
+    return rows.find((row) => Number(row.id) === this.patientRegisterSelectedId) || rows[0];
+  }
+
+  selectPatientRegister(row: Record<string, any>): void {
+    const id = Number(row?.['id']);
+    this.patientRegisterSelectedId = Number.isFinite(id) ? id : null;
+  }
+
+  openPatientDetails(row: Record<string, any>): void {
+    const id = Number(row?.['id']);
+    if (!Number.isFinite(id)) return;
+    this.patientDetailRow = row as PatientRow;
+    this.patientDetailTab = 'history';
+    this.active = 'patients-detail';
+    this.loadPatientDetailData(id);
+  }
+
+  setPatientDetailTab(tab: 'history' | 'plan' | 'documents' | 'billing' | 'xrays'): void {
+    this.patientDetailTab = tab;
+  }
+
+  closePatientDetails(): void {
+    this.active = 'patients-register';
+    this.patientDetailError = '';
+  }
+
+  private ensurePatientRegisterSelection(): void {
+    if (!this.patientRows.length) {
+      this.patientRegisterSelectedId = null;
+      return;
+    }
+    const selectedStillVisible = this.patientRows.some((row) => Number(row.id) === this.patientRegisterSelectedId);
+    if (!selectedStillVisible) {
+      this.patientRegisterSelectedId = Number(this.patientRows[0].id);
+    }
+  }
+
+  private loadPatientDetailData(patientId: number): void {
+    this.patientDetailLoading = true;
+    this.patientDetailError = '';
+    const patientName = String(this.patientDetailRow?.username || '').trim().toLowerCase();
+
+    forkJoin({
+      patient: this.http
+        .get<{ patient: PatientRow }>(`${this.patientApiUrl}/${patientId}`)
+        .pipe(map((res) => res?.patient || null), catchError(() => of(null))),
+      appointments: this.http
+        .get<{ appointments: AppointmentRow[] }>(this.appointmentApiUrl, { params: { page: 1, limit: 600 } })
+        .pipe(map((res) => res?.appointments || []), catchError(() => of([]))),
+      bills: this.http
+        .get<{
+          bills: Array<{
+            id: number;
+            patientName: string;
+            patientId?: number;
+            finalAmount: number;
+            paidAmount: number;
+            status: string;
+            billDate: string;
+          }>;
+        }>(`${this.financialApiUrl}/bills`, { params: { page: 1, limit: 600 } })
+        .pipe(map((res) => res?.bills || []), catchError(() => of([]))),
+      patientDocs: this.http
+        .get<{ attachments: AttachmentMetaRow[] }>(this.attachmentApiUrl, {
+          params: { entityType: 'patient', entityId: String(patientId), page: 1, limit: 200 }
+        })
+        .pipe(map((res) => res?.attachments || []), catchError(() => of([]))),
+      medicalDocs: this.http
+        .get<{ attachments: AttachmentMetaRow[] }>(this.attachmentApiUrl, {
+          params: { entityType: 'medical_record', entityId: String(patientId), page: 1, limit: 200 }
+        })
+        .pipe(map((res) => res?.attachments || []), catchError(() => of([])))
+    }).subscribe({
+      next: ({ patient, appointments, bills, patientDocs, medicalDocs }) => {
+        if (patient) this.patientDetailRow = patient;
+
+        this.patientDetailAppointments = (appointments || [])
+          .filter((a) => Number(a.patientId) === patientId)
+          .sort((a, b) => this.toTimestamp(b.appointmentDate, b.startTime) - this.toTimestamp(a.appointmentDate, a.startTime));
+
+        this.patientDetailBills = (bills || [])
+          .filter((b) => {
+            const billPatientId = Number((b as any)?.patientId);
+            if (Number.isFinite(billPatientId)) return billPatientId === patientId;
+            return patientName && String(b.patientName || '').trim().toLowerCase() === patientName;
+          })
+          .sort((a, b) => this.toTimestamp(b.billDate) - this.toTimestamp(a.billDate));
+
+        this.patientDetailDocuments = [...(patientDocs || []), ...(medicalDocs || [])].sort(
+          (a, b) => this.toTimestamp(b.createdDate || '') - this.toTimestamp(a.createdDate || '')
+        );
+        this.patientDetailLoading = false;
+      },
+      error: () => {
+        this.patientDetailAppointments = [];
+        this.patientDetailBills = [];
+        this.patientDetailDocuments = [];
+        this.patientDetailLoading = false;
+        this.patientDetailError = 'Unable to load patient details.';
+      }
+    });
+  }
+
+  private toTimestamp(date: string | null | undefined, time?: string | null): number {
+    if (!date) return 0;
+    const d = new Date(time ? `${date}T${time}` : date);
+    const t = d.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  get patientDetailXrayDocs(): AttachmentMetaRow[] {
+    return this.patientDetailDocuments.filter((d) => {
+      const t = String(d.documentType || '').toLowerCase();
+      return t.includes('xray') || t.includes('x-ray');
+    });
+  }
+
+  get patientDetailHistoryRows(): AppointmentRow[] {
+    return this.patientDetailAppointments.filter((a) => a.status === 'completed');
+  }
+
+  get patientDetailUpcomingAppointments(): AppointmentRow[] {
+    return this.patientDetailAppointments.filter((a) => a.status === 'scheduled');
+  }
+
+  getPatientHistoryAmount(appointmentDate: string | null | undefined): number | null {
+    if (!appointmentDate) return null;
+    const bill = this.patientDetailBills.find((b) => String(b.billDate || '').slice(0, 10) === String(appointmentDate).slice(0, 10));
+    if (!bill) return null;
+    return Number.isFinite(Number(bill.finalAmount)) ? Number(bill.finalAmount) : null;
+  }
+
+  private isDateWithinDays(dateValue: string | null | undefined, days: number): boolean {
+    if (!dateValue) return false;
+    const dt = new Date(dateValue);
+    const t = dt.getTime();
+    if (!Number.isFinite(t)) return false;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((t - now.getTime()) / 86400000);
+    return diffDays >= 0 && diffDays <= days;
+  }
+
   get paginatedInventoryRows(): { item: string; qty: number; status: string; cost: string }[] {
     const start = (this.inventoryPage - 1) * this.inventoryPageSize;
     return this.filteredInventoryRows.slice(start, start + this.inventoryPageSize);
@@ -2678,6 +2946,7 @@ export class HomeComponent implements OnInit {
           ...doctor,
           consultationFee: doctor.consultationFee !== null && doctor.consultationFee !== undefined ? Number(doctor.consultationFee) : null
         }));
+        this.ensureDoctorRegisterSelection();
         const pg = res?.pagination;
         this.doctorPagination = {
           page: pg?.page || page,
@@ -3036,14 +3305,55 @@ export class HomeComponent implements OnInit {
     this.clinicLoading = true;
     this.http.get<{ clinics: ClinicRow[] }>(this.clinicsApiUrl).subscribe({
       next: (res) => {
-        this.clinicRows = res?.clinics || [];
+        this.clinicRows = (res?.clinics || []).map((c) => ({
+          ...c,
+          doctorCount: c.doctorCount ?? 0,
+          patientCount: c.patientCount ?? 0
+        }));
         this.clinicLoading = false;
+        this.loadClinicCounts();
       },
       error: () => {
         this.clinicRows = [];
         this.clinicLoading = false;
         this.toast.error('Unable to load clinics.');
       }
+    });
+  }
+
+  private loadClinicCounts(): void {
+    if (!this.clinicRows.length) return;
+    forkJoin({
+      doctors: this.http
+        .get<{ doctors: Array<Record<string, any>> }>(this.doctorApiUrl, {
+          params: { page: 1, limit: 2000, q: '' }
+        })
+        .pipe(catchError(() => of({ doctors: [] }))),
+      patients: this.http
+        .get<{ patients: Array<Record<string, any>> }>(this.patientApiUrl, {
+          params: { page: 1, limit: 2000, q: '' }
+        })
+        .pipe(catchError(() => of({ patients: [] })))
+    }).subscribe(({ doctors, patients }) => {
+      const doctorCounts = new Map<number, number>();
+      const patientCounts = new Map<number, number>();
+
+      for (const row of doctors.doctors || []) {
+        const clinicId = Number(row?.['clinicId']);
+        if (!Number.isFinite(clinicId) || clinicId <= 0) continue;
+        doctorCounts.set(clinicId, (doctorCounts.get(clinicId) || 0) + 1);
+      }
+      for (const row of patients.patients || []) {
+        const clinicId = Number(row?.['clinicId']);
+        if (!Number.isFinite(clinicId) || clinicId <= 0) continue;
+        patientCounts.set(clinicId, (patientCounts.get(clinicId) || 0) + 1);
+      }
+
+      this.clinicRows = this.clinicRows.map((row) => ({
+        ...row,
+        doctorCount: doctorCounts.get(row.id) || 0,
+        patientCount: patientCounts.get(row.id) || 0
+      }));
     });
   }
 
@@ -3152,6 +3462,7 @@ export class HomeComponent implements OnInit {
       .subscribe({
       next: (res) => {
         this.patientRows = res?.patients || [];
+        this.ensurePatientRegisterSelection();
         const pg = res?.pagination;
         this.patientPagination = {
           page: pg?.page || page,
@@ -4298,6 +4609,7 @@ export class HomeComponent implements OnInit {
     this.inventoryApi.getItemAvailability(line.inventoryItemId).subscribe({
       next: (a) => {
         line.availableQty = a.available;
+        const expiringSoon = a.expiringWithinDays || this.isDateWithinDays(a.nearestUsableExpiry, 7);
         if (a.hasOnlyExpiredRemaining) {
           line.stockError = 'Only expired stock remains; cannot sell.';
           line.stockHint = '';
@@ -4307,7 +4619,7 @@ export class HomeComponent implements OnInit {
           line.stockHint =
             `Available: ${a.available}` +
             (a.nearestUsableExpiry ? ` · Next expiry ${a.nearestUsableExpiry}` : '') +
-            (a.expiringWithinDays ? ' · Expiring within 7 days' : '');
+            (expiringSoon ? ' · Expiring within 7 days' : '');
         }
         this.validateBillLineQty(line);
       },
@@ -4885,6 +5197,58 @@ export class HomeComponent implements OnInit {
     return this.docPatients.filter((p) => p.name.toLowerCase().includes(q));
   }
 
+  private getDocCategoryKey(documentType: string | null | undefined): 'prescriptions' | 'xrays' | 'labs' | 'consents' | 'plans' {
+    const t = String(documentType || '').toLowerCase();
+    if (t.includes('xray') || t.includes('x-ray')) return 'xrays';
+    if (t.includes('lab') || t.includes('report')) return 'labs';
+    if (t.includes('consent')) return 'consents';
+    if (t.includes('plan') || t.includes('treatment')) return 'plans';
+    return 'prescriptions';
+  }
+
+  get docPatientCategories(): Array<{ key: 'all' | 'prescriptions' | 'xrays' | 'labs' | 'consents' | 'plans'; label: string; count: number }> {
+    const counts = {
+      prescriptions: 0,
+      xrays: 0,
+      labs: 0,
+      consents: 0,
+      plans: 0
+    };
+    for (const row of this.docPatientAttachments) {
+      const key = this.getDocCategoryKey(row.documentType);
+      counts[key] += 1;
+    }
+    return [
+      { key: 'all', label: 'All Documents', count: this.docPatientAttachments.length },
+      { key: 'prescriptions', label: 'Prescriptions', count: counts.prescriptions },
+      { key: 'xrays', label: 'X-Rays', count: counts.xrays },
+      { key: 'labs', label: 'Lab Reports', count: counts.labs },
+      { key: 'consents', label: 'Consent Forms', count: counts.consents },
+      { key: 'plans', label: 'Treatment Plans', count: counts.plans }
+    ];
+  }
+
+  get docPatientAttachmentsDisplay(): AttachmentMetaRow[] {
+    const q = this.docPatientDocumentSearch.trim().toLowerCase();
+    return this.docPatientAttachments.filter((row) => {
+      const categoryMatch =
+        this.docPatientCategoryFilter === 'all' || this.getDocCategoryKey(row.documentType) === this.docPatientCategoryFilter;
+      if (!categoryMatch) return false;
+      if (!q) return true;
+      const hay = `${row.title || ''} ${row.fileName || ''} ${row.documentType || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  getDocPatientCardTypeLabel(row: AttachmentMetaRow): string {
+    const k = this.getDocCategoryKey(row.documentType);
+    if (k === 'xrays') return 'XR';
+    if (k === 'labs') return 'LAB';
+    if (k === 'consents') return 'CN';
+    if (k === 'plans') return 'PLN';
+    return 'DOC';
+  }
+
   get docAppointmentsForMedPatient(): AppointmentRow[] {
     if (!this.docMedPatientId) return [];
     return this.docAppointments.filter((a) => a.patientId === this.docMedPatientId);
@@ -4896,6 +5260,7 @@ export class HomeComponent implements OnInit {
   }
 
   onDocPatientSelected(): void {
+    this.docPatientUploadExpanded = false;
     this.loadDocumentsPatientList();
   }
 

@@ -214,4 +214,16 @@ export class InventoryItemsPageComponent implements OnInit {
   statusLabel(row: InventoryItemDto): string {
     return row.isActive ? 'Active' : 'Inactive';
   }
+
+  get totalItemsCount(): number {
+    return this.pagination.total || this.items.length;
+  }
+
+  get lowStockAlertCount(): number {
+    return this.items.filter((row) => Number(row.totalQuantity || 0) < Number(row.minStock || 0)).length;
+  }
+
+  get pendingOrdersCount(): number {
+    return this.items.filter((row) => Number(row.totalQuantity || 0) === 0).length;
+  }
 }

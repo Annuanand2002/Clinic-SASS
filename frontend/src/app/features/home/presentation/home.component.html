@@ -6,7 +6,7 @@
       </div>
       <div class="brand-text" *ngIf="!sidebarCollapsed">
         <div class="name">{{ organisation.name || 'Dental Clinic' }}</div>
-        <div class="plan">Management</div>
+        <div class="plan">Multi-Clinic Suite</div>
       </div>
 
       <button
@@ -17,6 +17,44 @@
       >
         <span class="collapse-ic" aria-hidden="true"></span>
       </button>
+    </div>
+
+    <div class="sidebar-clinic-switcher" *ngIf="showClinicSwitcher && !sidebarCollapsed">
+      <div class="sidebar-clinic-head">
+        <span class="sidebar-clinic-emoji" aria-hidden="true">CL</span>
+        <span class="sidebar-clinic-name">{{ isAllClinicsScope ? 'All clinics' : (selectedClinicLabel || 'Select clinic') }}</span>
+        <span class="sidebar-role-pill">{{ (user.role || 'Admin') | uppercase }}</span>
+      </div>
+      <label class="sidebar-clinic-label" for="sidebar-active-clinic-select">Switch clinic</label>
+      <select
+        id="sidebar-active-clinic-select"
+        class="sidebar-clinic-select"
+        [ngModel]="selectedClinicIdUi"
+        (ngModelChange)="onClinicSwitcherChange($event)"
+      >
+        <option [ngValue]="SELECTED_CLINIC_ALL">All clinics — combined view</option>
+        <option *ngFor="let c of clinicSwitcherOptions" [ngValue]="c.id">{{ c.name }}</option>
+      </select>
+      <p class="sidebar-clinic-hint muted" *ngIf="isAllClinicsScope">
+        {{ clinicAllScopeBanner }}
+      </p>
+    </div>
+
+    <div class="sidebar-search" *ngIf="!sidebarCollapsed">
+      <input
+        type="search"
+        class="sidebar-search-input"
+        [(ngModel)]="sidebarSearchQuery"
+        placeholder="Search modules"
+        autocomplete="off"
+        aria-label="Search sidebar modules"
+      />
+      <div class="sidebar-search-hits" *ngIf="sidebarSearchQuery.trim() && sidebarSearchMatches.length">
+        <button type="button" class="sidebar-search-hit" *ngFor="let hit of sidebarSearchMatches" (click)="navigateSidebarSearch(hit)">
+          {{ hit.pathLabel }}
+        </button>
+      </div>
+      <p class="sidebar-search-empty muted" *ngIf="sidebarSearchQuery.trim().length >= 1 && !sidebarSearchMatches.length">No matches</p>
     </div>
 
     <div class="nav-favorites-collapsed" *ngIf="sidebarCollapsed && sidebarFavoriteEntries.length">
@@ -57,25 +95,11 @@
       </button>
     </div>
 
-    <div class="section-title" *ngIf="!sidebarCollapsed">MODULES</div>
-    <div class="sidebar-search" *ngIf="!sidebarCollapsed">
-      <input
-        type="search"
-        class="sidebar-search-input"
-        [(ngModel)]="sidebarSearchQuery"
-        placeholder="Search modules (e.g. transaction dashboard)"
-        autocomplete="off"
-        aria-label="Search sidebar modules"
-      />
-      <div class="sidebar-search-hits" *ngIf="sidebarSearchQuery.trim() && sidebarSearchMatches.length">
-        <button type="button" class="sidebar-search-hit" *ngFor="let hit of sidebarSearchMatches" (click)="navigateSidebarSearch(hit)">
-          {{ hit.pathLabel }}
-        </button>
-      </div>
-      <p class="sidebar-search-empty muted" *ngIf="sidebarSearchQuery.trim().length >= 1 && !sidebarSearchMatches.length">No matches</p>
-    </div>
     <nav class="nav">
-      <ng-container *ngFor="let item of sidebarItems">
+      <ng-container *ngFor="let item of sidebarItems; let i = index">
+        <div class="section-title nav-group-title" *ngIf="!sidebarCollapsed && getSidebarSectionLabel(item.key) !== getSidebarSectionLabel(sidebarItems[i - 1]?.key)">
+          {{ getSidebarSectionLabel(item.key) }}
+        </div>
         <button
           class="nav-item"
           type="button"
@@ -125,28 +149,39 @@
 
   <main class="content">
     <header class="topbar">
-      <div class="page-title">
-        <div class="title">
-          {{ active === 'dashboard' ? 'Dashboard' : activeLabel }}
-        </div>
-        <div class="crumb">{{ active === 'dashboard' ? 'Operations snapshot' : 'Overview' }}</div>
+      <div class="topbar-left">
+        <span class="topbar-brand">{{ organisation.name || 'DentoCare' }}</span>
+        <span class="topbar-sep">›</span>
+        <span class="topbar-module">{{ active === 'dashboard' ? 'Dashboard' : activeLabel }}</span>
       </div>
-      <div class="topbar-clinic-wrap" *ngIf="showClinicSwitcher">
-        <div class="topbar-clinic">
-          <label class="topbar-clinic-label" for="active-clinic-select">Active clinic</label>
-          <select
-            id="active-clinic-select"
-            class="topbar-clinic-select"
-            [ngModel]="selectedClinicIdUi"
-            (ngModelChange)="onClinicSwitcherChange($event)"
-          >
-            <option [ngValue]="SELECTED_CLINIC_ALL">All clinics — combined view</option>
-            <option *ngFor="let c of clinicSwitcherOptions" [ngValue]="c.id">{{ c.name }}</option>
-          </select>
-        </div>
-        <p class="topbar-clinic-hint muted" *ngIf="isAllClinicsScope">
-          {{ clinicAllScopeBanner }}
-        </p>
+
+      <div class="topbar-search-wrap">
+        <span class="topbar-search-ic" aria-hidden="true">⌕</span>
+        <input
+          type="search"
+          class="topbar-search-input"
+          [(ngModel)]="headerSearchQuery"
+          (keydown.enter)="onHeaderSearchSubmit()"
+          placeholder="Search patients, appointments, staff..."
+          aria-label="Search modules and records"
+        />
+      </div>
+
+      <div class="topbar-actions">
+        <button type="button" class="topbar-action-btn" aria-label="Notifications">
+          🔔
+        </button>
+        <button
+          type="button"
+          class="topbar-action-btn"
+          [attr.aria-label]="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+          (click)="toggleTheme()"
+        >
+          {{ theme === 'dark' ? '☀' : '☾' }}
+        </button>
+        <button type="button" class="topbar-profile-btn" (click)="openSettingsFromHeader()" aria-label="Open profile settings">
+          {{ headerProfileInitials }}
+        </button>
       </div>
     </header>
 
@@ -1386,65 +1421,90 @@
     </section>
 
     <!-- Document Management -->
-    <section class="transactions-page documents-page" *ngIf="active === 'documents-patient'" @cardStagger>
-      <div class="inventory-page-head">
-        <h2>Document Management — Patient Documents</h2>
-        <p class="muted">Select a patient, upload files (X-rays, reports), then view, download, edit metadata, or delete.</p>
+    <section class="transactions-page documents-page documents-page-modern" *ngIf="active === 'documents-patient'" @cardStagger>
+      <div class="inventory-page-head docm-head">
+        <div>
+          <h2>Document Management</h2>
+          <p class="muted">Patient records, prescriptions, X-rays & reports</p>
+        </div>
+        <button class="btn-primary docm-upload-btn" type="button" (click)="docPatientUploadExpanded = true">+ Upload Document</button>
       </div>
-      <article class="glass-card inventory-section">
+
+      <article class="glass-card inventory-section docm-shell">
         <p class="muted" *ngIf="docMgmtDropdownsNeedSingleClinic" style="margin: 0 0 12px">
-          Choose one clinic in the header switcher (not “All clinics”) to load patients for this clinic only.
+          Choose one clinic in the switcher (not “All clinics”) to load patients for this clinic only.
         </p>
-        <div class="inventory-toolbar doc-toolbar">
-          <input type="search" class="inventory-search" [(ngModel)]="docPatientSearch" placeholder="Filter patient list…" />
-          <select [(ngModel)]="docPatientId" (ngModelChange)="onDocPatientSelected()">
+
+        <div class="inventory-toolbar doc-toolbar docm-top-controls">
+          <input type="search" class="inventory-search docm-patient-search" [(ngModel)]="docPatientSearch" placeholder="Filter patient list…" />
+          <select class="docm-patient-select" [(ngModel)]="docPatientId" (ngModelChange)="onDocPatientSelected()">
             <option [ngValue]="null">Select patient</option>
             <option *ngFor="let p of docPatientsFiltered" [ngValue]="p.id">{{ p.name }}</option>
           </select>
+          <input
+            type="search"
+            class="inventory-search docm-file-search"
+            [(ngModel)]="docPatientDocumentSearch"
+            placeholder="Search documents..."
+            [disabled]="!docPatientId"
+          />
         </div>
-        <h3 class="inventory-section-title">Create — upload</h3>
-        <div class="settings-grid doc-upload-grid" *ngIf="docPatientId">
-          <div class="form-group"><label>Document type</label><input type="text" [(ngModel)]="docPatientUpload.documentType" placeholder="e.g. xray, report" /></div>
-          <div class="form-group"><label>Title</label><input type="text" [(ngModel)]="docPatientUpload.title" placeholder="Optional title" /></div>
-          <div class="form-group full-width"><label>Description</label><input type="text" [(ngModel)]="docPatientUpload.description" placeholder="Optional" /></div>
-          <div class="form-group full-width"><label>File</label><input type="file" (change)="onDocPatientFileSelected($event)" /></div>
-          <div class="form-group"><button type="button" class="btn-primary" [disabled]="docPatientLoading || !docPatientUpload.file" (click)="submitDocumentsPatientUpload()">Create / Upload</button></div>
+
+        <div class="docm-layout" *ngIf="docPatientId">
+          <aside class="docm-categories">
+            <h4>Categories</h4>
+            <button
+              type="button"
+              class="docm-category-item"
+              *ngFor="let c of docPatientCategories"
+              [class.active]="docPatientCategoryFilter === c.key"
+              (click)="docPatientCategoryFilter = c.key"
+            >
+              <span>{{ c.label }}</span>
+              <span>{{ c.count }}</span>
+            </button>
+          </aside>
+
+          <section class="docm-content">
+            <div class="docm-cards">
+              <article class="docm-file-card" *ngFor="let row of docPatientAttachmentsDisplay">
+                <div class="docm-file-icon">{{ getDocPatientCardTypeLabel(row) }}</div>
+                <div class="docm-file-name" [title]="row.fileName">{{ row.fileName }}</div>
+                <div class="docm-file-meta">{{ formatDocDate(row.createdDate) }} · {{ row.title || 'Untitled' }}</div>
+                <div class="docm-file-actions">
+                  <button type="button" class="btn-icon ghost" (click)="openDocMgmtPreview(row)">View</button>
+                  <button type="button" class="btn-icon ghost" (click)="downloadDocMgmtAttachment(row)">Download</button>
+                  <button type="button" class="btn-icon ghost" (click)="openDocMgmtEdit(row)">Edit</button>
+                  <button type="button" class="btn-icon ghost" (click)="deleteDocMgmtAttachment(row)">Delete</button>
+                </div>
+              </article>
+
+              <button type="button" class="docm-file-card docm-upload-card" (click)="docPatientUploadExpanded = true">
+                <span class="docm-upload-plus">+</span>
+                <span>Upload New</span>
+              </button>
+            </div>
+
+            <p class="muted" *ngIf="docPatientLoading">Loading…</p>
+            <p class="muted" *ngIf="!docPatientLoading && !docPatientAttachmentsDisplay.length">No matching documents.</p>
+          </section>
         </div>
+
+        <div class="docm-upload-panel" *ngIf="docPatientId && docPatientUploadExpanded">
+          <h3 class="inventory-section-title">Upload document</h3>
+          <div class="settings-grid doc-upload-grid">
+            <div class="form-group"><label>Document type</label><input type="text" [(ngModel)]="docPatientUpload.documentType" placeholder="e.g. xray, report" /></div>
+            <div class="form-group"><label>Title</label><input type="text" [(ngModel)]="docPatientUpload.title" placeholder="Optional title" /></div>
+            <div class="form-group full-width"><label>Description</label><input type="text" [(ngModel)]="docPatientUpload.description" placeholder="Optional" /></div>
+            <div class="form-group full-width"><label>File</label><input type="file" (change)="onDocPatientFileSelected($event)" /></div>
+            <div class="form-group docm-upload-actions">
+              <button type="button" class="btn-primary" [disabled]="docPatientLoading || !docPatientUpload.file" (click)="submitDocumentsPatientUpload()">Create / Upload</button>
+              <button type="button" class="btn-icon ghost" (click)="docPatientUploadExpanded = false">Cancel</button>
+            </div>
+          </div>
+        </div>
+
         <p class="muted" *ngIf="!docPatientId">Choose a patient to upload or list documents.</p>
-        <h3 class="inventory-section-title">Documents</h3>
-        <div *ngIf="docPatientLoading" class="muted">Loading…</div>
-        <div class="table-wrap" *ngIf="docPatientId && !docPatientLoading">
-          <table class="register-table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Type</th>
-                <th>File</th>
-                <th>Uploaded</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of docPatientAttachments">
-                <td>{{ row.title || '—' }}</td>
-                <td>{{ row.documentType || '—' }}</td>
-                <td>{{ row.fileName }}</td>
-                <td>{{ formatDocDate(row.createdDate) }}</td>
-                <td>
-                  <div class="row-actions">
-                    <button type="button" class="btn-icon ghost" (click)="openDocMgmtPreview(row)">View</button>
-                    <button type="button" class="btn-icon ghost" (click)="downloadDocMgmtAttachment(row)">Download</button>
-                    <button type="button" class="btn-icon ghost" (click)="openDocMgmtEdit(row)">Edit</button>
-                    <button type="button" class="btn-icon ghost" (click)="deleteDocMgmtAttachment(row)">Delete</button>
-                  </div>
-                </td>
-              </tr>
-              <tr *ngIf="!docPatientAttachments.length">
-                <td colspan="5" class="muted" style="text-align: center; padding: 18px">No documents for this patient.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </article>
     </section>
 
@@ -1856,7 +1916,6 @@
       <div class="register-header">
         <div>
           <h2>{{ activeRegisterKey | titlecase }} Register</h2>
-          <p>Temporary table data. Download full table or per row in CSV, Excel, or PDF.</p>
         </div>
         <div class="form-group" *ngIf="activeRegisterKey === 'doctor' || activeRegisterKey === 'patients' || activeRegisterKey === 'staff'">
           <input type="text" [(ngModel)]="registerSearch" (input)="onRegisterSearchInput()" placeholder="Search records..." />
@@ -1885,150 +1944,213 @@
       </div>
 
       <div class="table-wrap">
-        <table class="register-table" *ngIf="activeRegisterKey === 'doctor'">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Profile</th>
-              <th>Username</th>
-              <th>Email</th>
-              <th>Specialization</th>
-              <th>Experience</th>
-              <th>Qualification</th>
-              <th>Consultation Fee</th>
-              <th>Available Time</th>
-              <th *ngIf="canManageUserAccounts">Active</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let row of paginatedRegisterRows; let i = index" [class.row-dropdown-open]="showDownloadDropdown === 'row' && activeRowForDownload === row">
-              <td>{{ ((registerPage - 1) * registerPageSize) + i + 1 }}</td>
-              <td>
-                <img
-                  *ngIf="row['profileImage']"
-                  [src]="row['profileImage']"
-                  alt="Doctor profile"
-                  style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid rgba(148,163,184,.35);"
-                />
-                <span
-                  *ngIf="!row['profileImage']"
-                  style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(79,70,229,.12);font-weight:700;"
-                >
-                  {{ (row['username'] || 'D').charAt(0) | uppercase }}
-                </span>
-              </td>
-              <td>{{ row['username'] }}</td>
-              <td>{{ row['email'] }}</td>
-              <td>{{ row['specialization'] }}</td>
-              <td>{{ row['experience'] }}</td>
-              <td>{{ row['qualification'] }}</td>
-              <td>{{ row['consultationFee'] }}</td>
-              <td>{{ row['availableTime'] }}</td>
-              <td *ngIf="canManageUserAccounts" class="toggle-cell">
-                <label class="register-account-switch">
-                  <input
-                    type="checkbox"
-                    [checked]="!!row['userAccountActive']"
-                    (change)="onUserAccountActiveChange(row, $any($event.target).checked)"
-                    [disabled]="userAccountToggleUserId === row['userId']"
-                  />
-                  <span class="register-account-switch-ui" aria-hidden="true"></span>
-                </label>
-              </td>
-              <td>
-                <div class="row-actions">
-                  <button class="btn-icon ghost" type="button" title="Edit Doctor" (click)="openEditDoctor(row)">✎</button>
-                  <button class="btn-icon ghost" type="button" title="Delete Doctor" (click)="deleteDoctor(row)">🗑</button>
-                  <div class="download-container">
-                    <button class="btn-icon ghost" (click)="toggleDownloadDropdown('row', row, $event)" title="Download Row">↓</button>
-                    <div class="dropdown-menu" *ngIf="showDownloadDropdown === 'row' && activeRowForDownload === row" (click)="$event.stopPropagation()">
-                      <button (click)="download('csv', 'row')">CSV</button>
-                      <button (click)="download('excel', 'row')">Excel</button>
-                      <button (click)="download('pdf', 'row')">PDF</button>
-                    </div>
-                  </div>
-                </div>
-              </td>
-            </tr>
-            <tr *ngIf="paginatedRegisterRows.length === 0">
-              <td [attr.colspan]="canManageUserAccounts ? 11 : 10" class="muted" style="text-align:center; padding:18px;">No data is present.</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <table class="register-table" *ngIf="activeRegisterKey === 'patients'">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Profile</th>
-              <th>Username</th>
-              <th>Email</th>
-              <th>Mobile</th>
-              <th>Gender</th>
-              <th>Blood Group</th>
-              <th>City</th>
-              <th *ngIf="canManageUserAccounts">Active</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              *ngFor="let row of paginatedRegisterRows; let i = index"
-              [class.row-dropdown-open]="showDownloadDropdown === 'row' && activeRowForDownload === row"
+        <div class="doctor-register-layout" *ngIf="activeRegisterKey === 'doctor'">
+          <section class="doctor-register-list">
+            <article
+              class="doctor-register-card"
+              *ngFor="let row of paginatedRegisterRows"
+              [class.is-selected]="selectedDoctorRegisterRow?.id === row['id']"
+              (click)="selectDoctorRegister(row)"
             >
-              <td>{{ ((registerPage - 1) * registerPageSize) + i + 1 }}</td>
-              <td>
-                <img
-                  *ngIf="row['profileImage']"
-                  [src]="row['profileImage']"
-                  alt="Patient profile"
-                  style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid rgba(148,163,184,.35);"
-                />
-                <span
-                  *ngIf="!row['profileImage']"
-                  style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(14,165,233,.12);font-weight:700;"
-                >
-                  {{ (row['username'] || 'P').charAt(0) | uppercase }}
-                </span>
-              </td>
-              <td>{{ row['username'] }}</td>
-              <td>{{ row['email'] }}</td>
-              <td>{{ row['mobile'] }}</td>
-              <td>{{ row['gender'] }}</td>
-              <td>{{ row['bloodGroup'] }}</td>
-              <td>{{ row['city'] }}</td>
-              <td *ngIf="canManageUserAccounts" class="toggle-cell">
+              <div class="doctor-register-card-head">
+                <div class="doctor-register-avatar-wrap">
+                  <img
+                    *ngIf="row['profileImage']"
+                    [src]="row['profileImage']"
+                    alt="Doctor profile"
+                    class="doctor-register-avatar"
+                  />
+                  <span *ngIf="!row['profileImage']" class="doctor-register-avatar fallback">
+                    {{ (row['username'] || 'D').charAt(0) | uppercase }}
+                  </span>
+                </div>
+                <div class="doctor-register-main">
+                  <h3>{{ row['username'] }}</h3>
+                  <p class="muted">{{ row['specialization'] || 'General practitioner' }}</p>
+                  <div class="doctor-register-rate">
+                    {{ formatMoney(row['consultationFee'] || 0) }} <span>/ hour</span>
+                  </div>
+                </div>
+              </div>
+              <div class="doctor-register-card-actions">
+                <button class="btn-primary doctor-register-detail-btn" type="button" (click)="selectDoctorRegister(row); $event.stopPropagation()">
+                  Show Details
+                </button>
+                <button class="btn-icon ghost" type="button" title="Edit Doctor" (click)="openEditDoctor(row); $event.stopPropagation()">✎</button>
+                <button class="btn-icon ghost" type="button" title="Delete Doctor" (click)="deleteDoctor(row); $event.stopPropagation()">🗑</button>
+                <div class="download-container" (click)="$event.stopPropagation()">
+                  <button class="btn-icon ghost" (click)="toggleDownloadDropdown('row', row, $event)" title="Download Row">↓</button>
+                  <div class="dropdown-menu" *ngIf="showDownloadDropdown === 'row' && activeRowForDownload === row" (click)="$event.stopPropagation()">
+                    <button (click)="download('csv', 'row')">CSV</button>
+                    <button (click)="download('excel', 'row')">Excel</button>
+                    <button (click)="download('pdf', 'row')">PDF</button>
+                  </div>
+                </div>
+              </div>
+            </article>
+            <p *ngIf="paginatedRegisterRows.length === 0" class="muted doctor-register-empty">No doctors found for this page.</p>
+          </section>
+
+          <aside class="doctor-register-detail glass-card" *ngIf="selectedDoctorRegisterRow as doctor; else doctorDetailsEmpty">
+            <div class="doctor-register-detail-head">
+              <h3>Doctor Details</h3>
+              <span class="pill">{{ doctor.specialization || 'General' }}</span>
+            </div>
+            <div class="doctor-register-detail-profile">
+              <img *ngIf="doctor.profileImage" [src]="doctor.profileImage" alt="Selected doctor profile" class="doctor-register-detail-avatar" />
+              <span *ngIf="!doctor.profileImage" class="doctor-register-detail-avatar fallback">
+                {{ (doctor.username || 'D').charAt(0) | uppercase }}
+              </span>
+              <div>
+                <h4>{{ doctor.username }}</h4>
+                <p class="muted">{{ doctor.email || 'No email on file' }}</p>
+                <div class="doctor-register-rate large">{{ formatMoney(doctor.consultationFee || 0) }} <span>/ hour</span></div>
+              </div>
+            </div>
+
+            <div class="doctor-register-detail-grid">
+              <div>
+                <h5>Experience</h5>
+                <p>{{ doctor.experience ?? 0 }} years</p>
+              </div>
+              <div>
+                <h5>Qualification</h5>
+                <p>{{ doctor.qualification || 'Not provided' }}</p>
+              </div>
+              <div>
+                <h5>Available Time</h5>
+                <p>{{ doctor.availableTime || 'Not set' }}</p>
+              </div>
+              <div *ngIf="canManageUserAccounts">
+                <h5>Account</h5>
                 <label class="register-account-switch">
                   <input
                     type="checkbox"
-                    [checked]="!!row['userAccountActive']"
-                    (change)="onUserAccountActiveChange(row, $any($event.target).checked)"
-                    [disabled]="userAccountToggleUserId === row['userId']"
+                    [checked]="!!doctor.userAccountActive"
+                    (change)="onUserAccountActiveChange(doctor, $any($event.target).checked)"
+                    [disabled]="userAccountToggleUserId === doctor.userId"
                   />
                   <span class="register-account-switch-ui" aria-hidden="true"></span>
                 </label>
-              </td>
-              <td>
-                <div class="row-actions">
-                  <button class="btn-icon ghost" type="button" title="Edit Patient" (click)="openEditPatient(row)">✎</button>
-                  <button class="btn-icon ghost" type="button" title="Delete Patient" (click)="deletePatient(row)">🗑</button>
-                  <div class="download-container">
-                    <button class="btn-icon ghost" (click)="toggleDownloadDropdown('row', row, $event)" title="Download Row">↓</button>
-                    <div class="dropdown-menu" *ngIf="showDownloadDropdown === 'row' && activeRowForDownload === row" (click)="$event.stopPropagation()">
-                      <button (click)="download('csv', 'row')">CSV</button>
-                      <button (click)="download('excel', 'row')">Excel</button>
-                      <button (click)="download('pdf', 'row')">PDF</button>
-                    </div>
+              </div>
+            </div>
+          </aside>
+
+          <ng-template #doctorDetailsEmpty>
+            <aside class="doctor-register-detail glass-card doctor-register-detail-empty">
+              <h3>Doctor Details</h3>
+              <p class="muted">Select a doctor card to view full details here.</p>
+            </aside>
+          </ng-template>
+        </div>
+
+        <div class="doctor-register-layout" *ngIf="activeRegisterKey === 'patients'">
+          <section class="doctor-register-list">
+            <article
+              class="doctor-register-card patient-register-card"
+              *ngFor="let row of paginatedRegisterRows"
+              [class.is-selected]="selectedPatientRegisterRow?.id === row['id']"
+              (click)="selectPatientRegister(row)"
+            >
+              <div class="doctor-register-card-head">
+                <div class="doctor-register-avatar-wrap">
+                  <img
+                    *ngIf="row['profileImage']"
+                    [src]="row['profileImage']"
+                    alt="Patient profile"
+                    class="doctor-register-avatar"
+                  />
+                  <span *ngIf="!row['profileImage']" class="doctor-register-avatar fallback">
+                    {{ (row['username'] || 'P').charAt(0) | uppercase }}
+                  </span>
+                </div>
+                <div class="doctor-register-main">
+                  <h3>{{ row['username'] }}</h3>
+                  <p class="muted">{{ row['gender'] || 'Not specified' }} <span *ngIf="row['bloodGroup']">· {{ row['bloodGroup'] }}</span></p>
+                  <div class="doctor-register-rate">
+                    {{ row['mobile'] || 'No mobile on file' }} <span>contact</span>
                   </div>
                 </div>
-              </td>
-            </tr>
-            <tr *ngIf="paginatedRegisterRows.length === 0">
-              <td [attr.colspan]="canManageUserAccounts ? 10 : 9" class="muted" style="text-align:center; padding:18px;">No data is present.</td>
-            </tr>
-          </tbody>
-        </table>
+              </div>
+              <div class="doctor-register-card-actions">
+                <button class="btn-primary doctor-register-detail-btn" type="button" (click)="openPatientDetails(row); $event.stopPropagation()">
+                  Show Details
+                </button>
+                <button class="btn-icon ghost" type="button" title="Edit Patient" (click)="openEditPatient(row); $event.stopPropagation()">✎</button>
+                <button class="btn-icon ghost" type="button" title="Delete Patient" (click)="deletePatient(row); $event.stopPropagation()">🗑</button>
+                <div class="download-container" (click)="$event.stopPropagation()">
+                  <button class="btn-icon ghost" (click)="toggleDownloadDropdown('row', row, $event)" title="Download Row">↓</button>
+                  <div class="dropdown-menu" *ngIf="showDownloadDropdown === 'row' && activeRowForDownload === row" (click)="$event.stopPropagation()">
+                    <button (click)="download('csv', 'row')">CSV</button>
+                    <button (click)="download('excel', 'row')">Excel</button>
+                    <button (click)="download('pdf', 'row')">PDF</button>
+                  </div>
+                </div>
+              </div>
+            </article>
+            <p *ngIf="paginatedRegisterRows.length === 0" class="muted doctor-register-empty">No patients found for this page.</p>
+          </section>
+
+          <aside class="doctor-register-detail glass-card patient-register-detail" *ngIf="selectedPatientRegisterRow as patient; else patientDetailsEmpty">
+            <div class="doctor-register-detail-head">
+              <h3>Patient Details</h3>
+              <span class="pill">{{ patient.bloodGroup || 'No blood group' }}</span>
+            </div>
+            <div class="doctor-register-detail-profile">
+              <img *ngIf="patient.profileImage" [src]="patient.profileImage" alt="Selected patient profile" class="doctor-register-detail-avatar" />
+              <span *ngIf="!patient.profileImage" class="doctor-register-detail-avatar fallback">
+                {{ (patient.username || 'P').charAt(0) | uppercase }}
+              </span>
+              <div>
+                <h4>{{ patient.username }}</h4>
+                <p class="muted">{{ patient.email || 'No email on file' }}</p>
+                <div class="doctor-register-rate large">{{ patient.mobile || 'No mobile on file' }} <span>primary contact</span></div>
+              </div>
+            </div>
+
+            <div class="doctor-register-detail-grid">
+              <div>
+                <h5>Gender</h5>
+                <p>{{ patient.gender || 'Not provided' }}</p>
+              </div>
+              <div>
+                <h5>Date of birth</h5>
+                <p>{{ patient.dateOfBirth || 'Not provided' }}</p>
+              </div>
+              <div>
+                <h5>City</h5>
+                <p>{{ patient.city || 'Not provided' }}</p>
+              </div>
+              <div>
+                <h5>Emergency Contact</h5>
+                <p>{{ patient.emergencyContact || patient.emergencyContactNumber || 'Not provided' }}</p>
+              </div>
+              <div>
+                <h5>Allergies</h5>
+                <p>{{ patient.allergies || 'None recorded' }}</p>
+              </div>
+              <div *ngIf="canManageUserAccounts">
+                <h5>Account</h5>
+                <label class="register-account-switch">
+                  <input
+                    type="checkbox"
+                    [checked]="!!patient.userAccountActive"
+                    (change)="onUserAccountActiveChange(patient, $any($event.target).checked)"
+                    [disabled]="userAccountToggleUserId === patient.userId"
+                  />
+                  <span class="register-account-switch-ui" aria-hidden="true"></span>
+                </label>
+              </div>
+            </div>
+          </aside>
+
+          <ng-template #patientDetailsEmpty>
+            <aside class="doctor-register-detail glass-card doctor-register-detail-empty">
+              <h3>Patient Details</h3>
+              <p class="muted">Select a patient card to view full details here.</p>
+            </aside>
+          </ng-template>
+        </div>
 
         <table class="register-table" *ngIf="activeRegisterKey === 'staff'">
           <thead>
@@ -2316,6 +2438,149 @@
             <button class="btn-icon ghost" type="button" (click)="closeStaffForm()">Close</button>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="register-page patient-detail-page" *ngIf="active === 'patients-detail'" @cardStagger>
+      <div class="register-header">
+        <div>
+          <h2>Patient Details</h2>
+          <p>Comprehensive patient profile including appointments, billing, and documents.</p>
+        </div>
+        <div class="row-actions">
+          <button class="btn-icon ghost" type="button" (click)="closePatientDetails()">Back</button>
+          <button class="btn-primary" type="button" *ngIf="patientDetailRow" (click)="openEditPatient(patientDetailRow)">Edit Patient</button>
+        </div>
+      </div>
+
+      <div class="patient-detail-layout" *ngIf="patientDetailRow as patient">
+        <aside class="patient-detail-sidebar glass-card">
+          <div class="patient-detail-profile">
+            <img *ngIf="patient.profileImage" [src]="patient.profileImage" alt="Patient profile" class="patient-detail-avatar" />
+            <span *ngIf="!patient.profileImage" class="patient-detail-avatar fallback">{{ (patient.username || 'P').charAt(0) | uppercase }}</span>
+            <h3>{{ patient.username }}</h3>
+            <p class="muted">#PT-{{ patient.id }} · DOB {{ patient.dateOfBirth || '—' }}</p>
+            <span class="patient-active-pill">Active Patient</span>
+          </div>
+
+          <div class="patient-contact-card">
+            <h4>Contact Info</h4>
+            <p><strong>Phone</strong><br />{{ patient.mobile || '—' }}</p>
+            <p><strong>Email</strong><br />{{ patient.email || '—' }}</p>
+            <p><strong>Blood Group</strong><br />{{ patient.bloodGroup || '—' }}</p>
+            <p><strong>Allergies</strong><br />{{ patient.allergies || 'None recorded' }}</p>
+          </div>
+        </aside>
+
+        <article class="patient-detail-main glass-card">
+          <div class="patient-detail-tabs">
+            <button type="button" [class.active]="patientDetailTab === 'history'" (click)="setPatientDetailTab('history')">History</button>
+            <button type="button" [class.active]="patientDetailTab === 'plan'" (click)="setPatientDetailTab('plan')">Treatment Plan</button>
+            <button type="button" [class.active]="patientDetailTab === 'documents'" (click)="setPatientDetailTab('documents')">Documents</button>
+            <button type="button" [class.active]="patientDetailTab === 'billing'" (click)="setPatientDetailTab('billing')">Billing</button>
+            <button type="button" [class.active]="patientDetailTab === 'xrays'" (click)="setPatientDetailTab('xrays')">X-Rays</button>
+          </div>
+
+          <p class="muted" *ngIf="patientDetailLoading">Loading details…</p>
+          <p class="save-error" *ngIf="patientDetailError">{{ patientDetailError }}</p>
+
+          <div *ngIf="!patientDetailLoading && patientDetailTab === 'history'" class="patient-history-list">
+            <article class="patient-history-item" *ngFor="let row of patientDetailHistoryRows">
+              <div class="patient-history-main">
+                <h4>{{ row.title || 'Consultation' }}</h4>
+                <p class="muted">{{ row.doctorName || 'Doctor' }} · {{ row.appointmentDate }}</p>
+                <p>{{ row.description || 'No clinical notes.' }}</p>
+              </div>
+              <div class="patient-history-meta">
+                <div>{{ row.appointmentDate }}</div>
+                <strong>{{ formatMoney(getPatientHistoryAmount(row.appointmentDate) || 0) }}</strong>
+              </div>
+            </article>
+            <p class="muted" *ngIf="!patientDetailHistoryRows.length">No completed visits yet.</p>
+          </div>
+
+          <div *ngIf="!patientDetailLoading && patientDetailTab === 'plan'" class="patient-plan-block">
+            <div class="patient-plan-summary">
+              <span class="patient-plan-pill">Blood: {{ patient.bloodGroup || '—' }}</span>
+              <span class="patient-plan-pill">Allergies: {{ patient.allergies || 'None' }}</span>
+              <span class="patient-plan-pill">Upcoming: {{ patientDetailUpcomingAppointments.length }}</span>
+              <span class="patient-plan-pill">Billing records: {{ patientDetailBills.length }}</span>
+            </div>
+
+            <article class="patient-plan-note-card">
+              <h4>Treatment Notes</h4>
+              <p>{{ patient.medicalHistory || 'No treatment plan or history notes recorded.' }}</p>
+            </article>
+
+            <article class="patient-plan-timeline-card">
+              <h4>Upcoming appointments</h4>
+              <div class="patient-plan-list">
+                <div class="patient-plan-item" *ngFor="let row of patientDetailUpcomingAppointments">
+                  <div class="patient-plan-item-date">{{ row.appointmentDate }} {{ row.startTime }}</div>
+                  <div class="patient-plan-item-main">
+                    <strong>{{ row.title || 'Visit' }}</strong>
+                    <p class="muted">{{ row.doctorName || 'Doctor' }} · {{ row.status }}</p>
+                  </div>
+                </div>
+              </div>
+              <p class="muted" *ngIf="!patientDetailUpcomingAppointments.length">No upcoming appointments.</p>
+            </article>
+          </div>
+
+          <div *ngIf="!patientDetailLoading && patientDetailTab === 'documents'" class="patient-doc-list">
+            <article class="patient-doc-item" *ngFor="let row of patientDetailDocuments">
+              <div>
+                <strong>{{ row.title || row.fileName }}</strong>
+                <p class="muted">{{ row.documentType || 'general' }} · {{ formatDocDate(row.createdDate) }}</p>
+              </div>
+              <div class="row-actions">
+                <button class="btn-icon ghost" type="button" (click)="openDocMgmtPreview(row)">View</button>
+                <button class="btn-icon ghost" type="button" (click)="downloadDocMgmtAttachment(row)">Download</button>
+              </div>
+            </article>
+            <p class="muted" *ngIf="!patientDetailDocuments.length">No documents found.</p>
+          </div>
+
+          <div *ngIf="!patientDetailLoading && patientDetailTab === 'billing'" class="table-wrap">
+            <table class="register-table">
+              <thead>
+                <tr>
+                  <th>Bill #</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Total</th>
+                  <th>Paid</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let b of patientDetailBills">
+                  <td>#{{ b.id }}</td>
+                  <td>{{ b.billDate }}</td>
+                  <td>{{ b.status }}</td>
+                  <td>{{ formatMoney(b.finalAmount) }}</td>
+                  <td>{{ formatMoney(b.paidAmount) }}</td>
+                </tr>
+                <tr *ngIf="!patientDetailBills.length">
+                  <td colspan="5" class="muted" style="text-align:center;padding:16px;">No billing records available.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div *ngIf="!patientDetailLoading && patientDetailTab === 'xrays'" class="patient-doc-list">
+            <article class="patient-doc-item" *ngFor="let row of patientDetailXrayDocs">
+              <div>
+                <strong>{{ row.title || row.fileName }}</strong>
+                <p class="muted">{{ formatDocDate(row.createdDate) }}</p>
+              </div>
+              <div class="row-actions">
+                <button class="btn-icon ghost" type="button" (click)="openDocMgmtPreview(row)">View</button>
+                <button class="btn-icon ghost" type="button" (click)="downloadDocMgmtAttachment(row)">Download</button>
+              </div>
+            </article>
+            <p class="muted" *ngIf="!patientDetailXrayDocs.length">No X-ray files found.</p>
+          </div>
+        </article>
       </div>
     </section>
 
@@ -2696,38 +2961,53 @@
         </div>
         <button class="btn-primary" type="button" (click)="openCreateClinic()">Add clinic</button>
       </div>
-      <div class="table-wrap">
+      <div class="clinic-manage-grid-wrap">
         <p class="muted" *ngIf="clinicLoading" style="padding:16px;">Loading clinics…</p>
-        <table class="register-table" *ngIf="!clinicLoading">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Phone</th>
-              <th>Email</th>
-              <th>Address</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let row of clinicRows; let i = index">
-              <td>{{ i + 1 }}</td>
-              <td>{{ row.name }}</td>
-              <td>{{ row.phone || '—' }}</td>
-              <td>{{ row.email || '—' }}</td>
-              <td class="muted" style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" [title]="row.address">{{ row.address || '—' }}</td>
-              <td>
-                <div class="row-actions">
-                  <button class="btn-icon ghost" type="button" title="Edit" (click)="openEditClinic(row)">✎</button>
-                  <button class="btn-icon ghost" type="button" title="Delete" (click)="deleteClinic(row)">🗑</button>
+
+        <div class="clinic-manage-grid" *ngIf="!clinicLoading && clinicRows.length">
+          <article
+            class="clinic-card"
+            *ngFor="let row of clinicRows; let i = index"
+            [class.accent-2]="i % 3 === 1"
+            [class.accent-3]="i % 3 === 2"
+          >
+            <header class="clinic-card-head">
+              <div class="clinic-card-title-row">
+                <span class="clinic-card-ic" aria-hidden="true">🏥</span>
+                <h3>{{ row.name }}</h3>
+              </div>
+              <p class="clinic-card-sub">Branch {{ i + 1 }}</p>
+            </header>
+
+            <div class="clinic-card-body">
+              <div class="clinic-card-stats">
+                <div class="clinic-stat-box">
+                  <div class="clinic-stat-value">{{ $any(row).doctorCount ?? 0 }}</div>
+                  <div class="clinic-stat-label">Doctors</div>
                 </div>
-              </td>
-            </tr>
-            <tr *ngIf="!clinicRows.length">
-              <td colspan="6" class="muted" style="text-align:center;padding:18px;">No clinics yet. Add one to assign staff and records.</td>
-            </tr>
-          </tbody>
-        </table>
+                <div class="clinic-stat-box">
+                  <div class="clinic-stat-value">{{ $any(row).patientCount ?? 0 }}</div>
+                  <div class="clinic-stat-label">Patients</div>
+                </div>
+              </div>
+
+              <div class="clinic-card-meta">
+                <p [title]="row.address"><span aria-hidden="true">📍</span> {{ row.address || 'Address not set' }}</p>
+                <p><span aria-hidden="true">📞</span> {{ row.phone || 'Phone not set' }}</p>
+              </div>
+
+              <div class="clinic-card-actions">
+                <button class="btn-icon ghost clinic-btn" type="button" (click)="openEditClinic(row)">View Details</button>
+                <button class="btn-primary clinic-btn" type="button" (click)="openEditClinic(row)">Manage</button>
+                <button class="btn-icon ghost clinic-icon-btn" type="button" title="Delete clinic" (click)="deleteClinic(row)">🗑</button>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="clinic-empty muted" *ngIf="!clinicLoading && !clinicRows.length">
+          No clinics yet. Add one to assign staff and records.
+        </div>
       </div>
     </section>
 
@@ -3319,6 +3599,12 @@
           <button class="btn-icon ghost" type="button" (click)="closeClinicForm()">Close</button>
         </div>
       </div>
+    </div>
+
+    <div class="zoom-controls" aria-label="Zoom controls">
+      <button type="button" class="zoom-btn" (click)="decreaseZoom()" [disabled]="zoomPercent <= minZoomPercent" aria-label="Zoom out">−</button>
+      <button type="button" class="zoom-value" (click)="resetZoom()" title="Reset zoom">{{ zoomPercent }}%</button>
+      <button type="button" class="zoom-btn" (click)="increaseZoom()" [disabled]="zoomPercent >= maxZoomPercent" aria-label="Zoom in">+</button>
     </div>
   </main>
 </div>

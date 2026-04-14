@@ -1,27 +1,49 @@
 <section class="inventory-page">
-  <header class="inventory-hero inventory-hero--items">
-    <div class="inventory-hero-text">
-      <p class="inventory-hero-kicker">Catalog</p>
-      <h2>Inventory — Items</h2>
-      <p class="muted">Define products and medicines; “Available” is usable stock (non-expired batches).</p>
+  <header class="inventory-modern-head">
+    <div class="inventory-modern-head-text">
+      <h2>Inventory Management</h2>
+      <p class="muted">Track supplies and consumables across all clinics</p>
     </div>
-    <div class="inventory-hero-accent" aria-hidden="true"></div>
+    <div class="inventory-modern-actions">
+      <button *ngIf="canEdit" class="btn-icon ghost" type="button">+ Request Stock</button>
+      <button *ngIf="canEdit" class="btn-primary" type="button" (click)="openCreate()">+ Add Item</button>
+    </div>
   </header>
 
-  <article class="glass-card inventory-section inventory-card--catalog">
-    <div class="inventory-toolbar">
-      <input
-        type="text"
-        class="inventory-search"
-        [(ngModel)]="search"
-        (input)="onSearchInput()"
-        placeholder="Search by name…"
-      />
-      <select class="inventory-select" [(ngModel)]="categoryFilter" (change)="onCategoryChange()">
-        <option value="">All categories</option>
-        <option *ngFor="let c of meta?.categories || []" [value]="c.value">{{ c.label }}</option>
-      </select>
-      <button *ngIf="canEdit" class="btn-primary" type="button" (click)="openCreate()">+ Add item</button>
+  <section class="inventory-modern-kpi-row">
+    <article class="inventory-modern-kpi">
+      <div class="inventory-modern-kpi-ic">♥</div>
+      <div class="inventory-modern-kpi-value">{{ totalItemsCount }}</div>
+      <div class="inventory-modern-kpi-label">Total Items</div>
+    </article>
+    <article class="inventory-modern-kpi warning">
+      <div class="inventory-modern-kpi-ic">⚠</div>
+      <div class="inventory-modern-kpi-value">{{ lowStockAlertCount }}</div>
+      <div class="inventory-modern-kpi-label">Low Stock Alerts</div>
+    </article>
+    <article class="inventory-modern-kpi info">
+      <div class="inventory-modern-kpi-ic">≡</div>
+      <div class="inventory-modern-kpi-value">{{ pendingOrdersCount }}</div>
+      <div class="inventory-modern-kpi-label">Pending Orders</div>
+    </article>
+  </section>
+
+  <article class="glass-card inventory-section inventory-modern-table-card">
+    <div class="inventory-modern-table-head">
+      <h3>Stock Overview</h3>
+      <div class="inventory-modern-table-filters">
+        <input
+          type="text"
+          class="inventory-search"
+          [(ngModel)]="search"
+          (input)="onSearchInput()"
+          placeholder="Search item..."
+        />
+        <select class="inventory-select" [(ngModel)]="categoryFilter" (change)="onCategoryChange()">
+          <option value="">All Categories</option>
+          <option *ngFor="let c of meta?.categories || []" [value]="c.value">{{ c.label }}</option>
+        </select>
+      </div>
     </div>
 
     <p *ngIf="loading" class="muted loading-line">Loading…</p>

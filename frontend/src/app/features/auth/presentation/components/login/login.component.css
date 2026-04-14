@@ -2,16 +2,16 @@
 
 :host {
   display: block;
-  --bg: #f4f8ff;
+  --bg: #f3f7fb;
   --white: #ffffff;
-  --blue: #3b82f6;
-  --blue-lt: #eff6ff;
-  --blue-mid: #93c5fd;
-  --navy: #1e3a5f;
-  --text: #1a2e45;
-  --sub: #6b82a0;
-  --border: #dce8f7;
-  --shadow: rgba(59, 130, 246, 0.1);
+  --blue: #0f4b72;
+  --blue-lt: #eef6fb;
+  --blue-mid: #69a4c7;
+  --navy: #0e3b59;
+  --text: #1f2937;
+  --sub: #64748b;
+  --border: #d6e5f1;
+  --shadow: rgba(15, 75, 114, 0.14);
   --err: #dc2626;
 }
 
@@ -290,24 +290,24 @@ form .meta-row {
     box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.8) inset,
-    0 4px 18px rgba(59, 130, 246, 0.12),
-    0 0 0 1.5px rgba(59, 130, 246, 0.22);
+    0 4px 18px rgba(15, 75, 114, 0.12),
+    0 0 0 1.5px rgba(15, 75, 114, 0.22);
 }
 
 .field-wrap:hover {
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 6px 22px rgba(59, 130, 246, 0.18),
-    0 0 0 1.5px rgba(59, 130, 246, 0.35);
+    0 6px 22px rgba(15, 75, 114, 0.18),
+    0 0 0 1.5px rgba(15, 75, 114, 0.35);
 }
 
 .field-wrap:focus-within {
   transform: translateY(-2px);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 1) inset,
-    0 12px 32px rgba(59, 130, 246, 0.28),
+    0 12px 32px rgba(15, 75, 114, 0.28),
     0 0 0 2px var(--blue),
-    0 0 0 6px rgba(59, 130, 246, 0.15);
+    0 0 0 6px rgba(15, 75, 114, 0.15);
 }
 
 .field-wrap .ico {
@@ -334,7 +334,7 @@ form .meta-row {
   padding: 14px 16px 14px 44px;
   min-height: 48px;
   background: linear-gradient(180deg, #ffffff 0%, var(--blue-lt) 100%);
-  border: 2px solid rgba(59, 130, 246, 0.35);
+  border: 2px solid rgba(15, 75, 114, 0.35);
   border-radius: 10px;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 0.9rem;
@@ -347,7 +347,7 @@ form .meta-row {
     box-shadow 0.28s ease;
   -webkit-appearance: none;
   appearance: none;
-  box-shadow: inset 0 1px 3px rgba(59, 130, 246, 0.06);
+  box-shadow: inset 0 1px 3px rgba(15, 75, 114, 0.06);
 }
 
 .field-wrap:has(.pw-btn) input {
@@ -360,15 +360,15 @@ form .meta-row {
 }
 
 .field input:hover:not(:focus) {
-  border-color: rgba(59, 130, 246, 0.5);
+  border-color: rgba(15, 75, 114, 0.5);
 }
 
 .field input:focus {
   border-color: var(--blue);
   background: #fff;
   box-shadow:
-    inset 0 1px 2px rgba(59, 130, 246, 0.04),
-    0 0 0 1px rgba(59, 130, 246, 0.08);
+    inset 0 1px 2px rgba(15, 75, 114, 0.04),
+    0 0 0 1px rgba(15, 75, 114, 0.08);
 }
 
 .field input.input-invalid {
@@ -391,7 +391,7 @@ form .meta-row {
   position: absolute;
   right: 12px;
   background: rgba(239, 246, 255, 0.9);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(15, 75, 114, 0.2);
   border-radius: 8px;
   cursor: pointer;
   color: var(--blue);
@@ -473,7 +473,7 @@ form .meta-row {
   width: 100%;
   padding: 15px 18px;
   min-height: 52px;
-  background: linear-gradient(135deg, #60a5fa 0%, var(--blue) 45%, #1d4ed8 100%);
+  background: linear-gradient(135deg, #1f6a94 0%, var(--blue) 45%, #0d3f61 100%);
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -489,7 +489,7 @@ form .meta-row {
   transition: background 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
   position: relative;
   box-shadow:
-    0 4px 16px rgba(59, 130, 246, 0.35),
+    0 4px 16px rgba(15, 75, 114, 0.35),
     0 0 0 1px rgba(255, 255, 255, 0.12) inset;
 }
 
